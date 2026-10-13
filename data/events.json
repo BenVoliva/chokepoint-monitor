@@ -1,0 +1,232 @@
+{
+  "about": "Hand-curated timeline events. 'chokepoints' lists the keys from transits.json an event bears on (empty for global, price-led events). 'kind' is one of conflict, accident, climate, policy, market, data. Figures quoted in a summary come from data/transits.json and data/prices.json unless the summary names another source.",
+  "accessed": "2026-10-13",
+  "events": [
+    {
+      "id": "gulf-of-oman-tankers",
+      "date": "2019-06-13",
+      "chokepoints": ["hormuz"],
+      "kind": "conflict",
+      "title": "Two tankers attacked in the Gulf of Oman",
+      "summary": "Explosions damaged the tankers Front Altair and Kokuka Courageous just outside the strait. Washington blamed Iran, which denied involvement. Traffic through Hormuz did not fall.",
+      "source": {"name": "CBS News", "url": "https://www.cbsnews.com/news/oil-tanker-attacks-gulf-of-oman-tanker-owner-seems-to-dispute-us-account-of-gulf-of-oman-attack-today-2019-06-14"}
+    },
+    {
+      "id": "stena-impero",
+      "date": "2019-07-19",
+      "chokepoints": ["hormuz"],
+      "kind": "conflict",
+      "title": "Iran seizes the tanker Stena Impero",
+      "summary": "Revolutionary Guards boarded the British-flagged tanker in the strait, and Britain told its ships to stay away for a time. Daily transits barely moved.",
+      "source": {"name": "Al Jazeera", "url": "https://www.aljazeera.com/news/2019/07/iran-seized-british-oil-tanker-gulf-190719180058275.html"}
+    },
+    {
+      "id": "covid-pandemic",
+      "date": "2020-03-11",
+      "chokepoints": [],
+      "kind": "market",
+      "title": "WHO calls COVID-19 a pandemic",
+      "summary": "Lockdowns crushed oil demand and Brent fell from $36 a barrel to $9 by 21 April. Ship counts at these chokepoints held up far better than prices did.",
+      "source": {"name": "World Health Organization", "url": "https://www.who.int/news-room/speeches/item/who-director-general-s-opening-remarks-at-the-media-briefing-on-covid-19---11-march-2020"}
+    },
+    {
+      "id": "ever-given",
+      "date": "2021-03-23",
+      "end": "2021-03-29",
+      "chokepoints": ["suez"],
+      "kind": "accident",
+      "title": "Ever Given blocks the Suez Canal",
+      "summary": "The 400-metre container ship ran aground and shut the canal for six days while more than 350 ships queued. PortWatch shows two transits on 25 March against a normal 50 to 60.",
+      "source": {"name": "Seatrade Maritime", "url": "https://www.seatrade-maritime.com/containers/ever-given-blocking-suez-canal-re-floated"}
+    },
+    {
+      "id": "malacca-counting-change",
+      "date": "2021-11-08",
+      "chokepoints": ["malacca"],
+      "kind": "data",
+      "title": "Counting change at Malacca",
+      "summary": "PortWatch's Malacca count jumps by more than a third in a single week, across every ship type, with no matching move at any other chokepoint. This looks like a change in how transits are counted, not a surge in trade, so earlier Malacca figures are on a different basis.",
+      "source": {"name": "IMF PortWatch (pattern in the data)", "url": "https://portwatch.imf.org/"}
+    },
+    {
+      "id": "russia-invades-ukraine",
+      "date": "2022-02-24",
+      "chokepoints": [],
+      "kind": "conflict",
+      "title": "Russia invades Ukraine",
+      "summary": "Brent crossed $100 a barrel within days, for the first time since 2014, and peaked at $133 on 8 March. For these chokepoints it was a price shock, not a traffic one.",
+      "source": {"name": "U.S. Energy Information Administration", "url": "https://www.eia.gov/todayinenergy/detail.php?id=51498"}
+    },
+    {
+      "id": "panama-drought-cap",
+      "date": "2023-07-30",
+      "chokepoints": ["panama"],
+      "kind": "climate",
+      "title": "Drought forces Panama to cap transits",
+      "summary": "With Gatun Lake low, the canal authority limited traffic to 32 ships a day, down from about 36 in normal conditions.",
+      "source": {"name": "Seatrade Maritime", "url": "https://www.seatrade-maritime.com/panama/panama-canal-reduce-daily-vessel-transits-due-drought"}
+    },
+    {
+      "id": "panama-deeper-cuts",
+      "date": "2023-11-03",
+      "chokepoints": ["panama"],
+      "kind": "climate",
+      "title": "Panama cuts deeper",
+      "summary": "After the driest October since 1950, booking slots dropped to 25 a day, then 24 and 22, with 18 planned for February. PortWatch counts bottomed at 18 to 21 a day in January 2024.",
+      "source": {"name": "The Waterways Journal", "url": "https://www.waterwaysjournal.net/2023/11/15/panama-canal-restrictions-extended-deepened/"}
+    },
+    {
+      "id": "galaxy-leader",
+      "date": "2023-11-19",
+      "chokepoints": ["bab", "suez"],
+      "kind": "conflict",
+      "title": "Houthis seize the Galaxy Leader",
+      "summary": "Yemen's Houthis hijacked the car carrier in the Red Sea and took its 25 crew hostage, opening a campaign against merchant ships that they tied to the war in Gaza.",
+      "source": {"name": "Associated Press via Anchorage Daily News", "url": "https://www.adn.com/nation-world/2023/11/19/yemens-houthi-rebels-hijack-an-israeli-linked-ship-in-the-red-sea-and-take-25-crew-members-hostage/"}
+    },
+    {
+      "id": "carriers-leave-red-sea",
+      "date": "2023-12-15",
+      "chokepoints": ["bab", "suez", "cape"],
+      "kind": "conflict",
+      "title": "Container lines leave the Red Sea",
+      "summary": "Maersk and Hapag-Lloyd paused sailings through Bab el-Mandeb after attacks on their ships, and MSC and CMA CGM followed a day later. Within two months Suez transits fell from about 75 a day to about 40, while traffic round the Cape rose from about 50 to about 90.",
+      "source": {"name": "Argus Media", "url": "https://www.argusmedia.com/en/news-and-insights/latest-market-news/2519660-maersk-hapag-lloyd-pause-shipments-through-the-red-sea"}
+    },
+    {
+      "id": "us-uk-strikes-yemen",
+      "date": "2024-01-11",
+      "chokepoints": ["bab", "suez"],
+      "kind": "conflict",
+      "title": "US and UK strike Houthi targets",
+      "summary": "The first of many rounds of strikes in Yemen aimed to stop the attacks on shipping. Traffic did not come back.",
+      "source": {"name": "GZERO Media", "url": "https://gzeromedia.com/amp/us-and-uk-hit-houthi-targets-in-yemen-2666937126"}
+    },
+    {
+      "id": "panama-eases",
+      "date": "2024-01-16",
+      "chokepoints": ["panama"],
+      "kind": "climate",
+      "title": "Panama eases as rain returns",
+      "summary": "Better rain in November let the canal authority drop its planned cut to 18 ships a day and lift daily slots to 24 instead.",
+      "source": {"name": "Panama Canal Authority", "url": "https://pancanal.com/en/panama-canal-to-increase-daily-transits-to-24-starting-in-january/"}
+    },
+    {
+      "id": "panama-back-to-36",
+      "date": "2024-09-01",
+      "chokepoints": ["panama"],
+      "kind": "climate",
+      "title": "Panama back to 36 slots a day",
+      "summary": "The maximum draft returned to the full 50 feet on 15 August and booking slots to 36 on 1 September, ending a year of drought restrictions.",
+      "source": {"name": "Supply Chain 24/7", "url": "https://www.supplychain247.com/article/panama-canal-36-daily-transit-slots-september/freight_forwarding"}
+    },
+    {
+      "id": "trump-panama",
+      "date": "2025-01-20",
+      "chokepoints": ["panama"],
+      "kind": "policy",
+      "title": "Trump vows to take back the canal",
+      "summary": "In his inaugural address the US president claimed China was running the canal and said the United States was \"taking it back\". Panama's president rejected the claim. Traffic was unaffected.",
+      "source": {"name": "The Maritime Executive", "url": "https://maritime-executive.com/article/in-inaugural-address-trump-pledges-to-take-back-panama-canal"}
+    },
+    {
+      "id": "iran-parliament-vote",
+      "date": "2025-06-22",
+      "chokepoints": ["hormuz"],
+      "kind": "conflict",
+      "title": "Iran's parliament backs closing Hormuz",
+      "summary": "After US strikes on Iranian nuclear sites, lawmakers endorsed closing the strait and left the decision to the security council. It stayed open: about 100 ships a day kept crossing, and Brent peaked near $80.",
+      "source": {"name": "The New Arab", "url": "https://www.newarab.com/news/iran-mulls-hormuz-closure-after-parliament-approval"}
+    },
+    {
+      "id": "magic-seas-eternity-c",
+      "date": "2025-07-06",
+      "chokepoints": ["bab", "suez"],
+      "kind": "conflict",
+      "title": "Two cargo ships attacked in the Red Sea",
+      "summary": "Houthis attacked the bulk carrier Magic Seas on 6 July, forcing its crew to abandon ship, and hit the Eternity C a day later, killing three seafarers.",
+      "source": {"name": "PBS NewsHour", "url": "https://www.pbs.org/newshour/world/yemens-houthi-rebels-attack-red-sea-ship-killing-3-after-claiming-they-sank-another"}
+    },
+    {
+      "id": "houthis-end-campaign",
+      "date": "2025-11-11",
+      "chokepoints": ["bab", "suez", "cape"],
+      "kind": "policy",
+      "title": "Houthis announce an end to shipping attacks",
+      "summary": "A letter from the group's chief of staff said its campaign against Israel-linked shipping was over. Carriers did not rush back: three months later Suez transits were still about 40 a day, against about 75 before the crisis.",
+      "source": {"name": "The Maritime Executive", "url": "https://maritime-executive.com/article/houthis-announce-end-of-red-sea-shipping-attacks"}
+    },
+    {
+      "id": "hormuz-closes",
+      "date": "2026-02-28",
+      "chokepoints": ["hormuz"],
+      "kind": "conflict",
+      "title": "US and Israel strike Iran; Hormuz closes",
+      "summary": "Iran's Revolutionary Guards warned ships off within hours, and the closure was confirmed on 2 March. PortWatch transits fell from roughly 100 a day in the last week of February to 3 a day in the first week of March, and Brent rose from $71 to a peak of $138 on 7 April.",
+      "source": {"name": "Al Jazeera", "url": "https://www.aljazeera.com/news/2026/8/27/how-a-95-percent-drop-in-hormuz-traffic-changed-global-shipping"}
+    },
+    {
+      "id": "us-blockade",
+      "date": "2026-04-13",
+      "chokepoints": ["hormuz"],
+      "kind": "conflict",
+      "title": "US blockades Iranian ports",
+      "summary": "A ceasefire on 8 April was meant to reopen the strait, but talks in Islamabad failed and the US Navy began stopping ships bound to or from Iran. Transits stayed mostly under 10 a day.",
+      "source": {"name": "Wikipedia: 2026 United States naval blockade of Iran", "url": "https://en.wikipedia.org/wiki/2026_United_States_naval_blockade_of_Iran"}
+    },
+    {
+      "id": "hormuz-mou",
+      "date": "2026-06-17",
+      "chokepoints": ["hormuz"],
+      "kind": "policy",
+      "title": "US–Iran memorandum partly reopens Hormuz",
+      "summary": "Crossings resumed the next day and the US lifted its blockade. PortWatch counted 513 ships from 18 June to 5 July, about 28 a day against roughly 100 before the war. Brent fell back to $69.",
+      "source": {"name": "Al Jazeera", "url": "https://www.aljazeera.com/news/2026/7/9/strait-of-hormuz-what-has-happened-since-the-us-iran-mou-on-june-17"}
+    },
+    {
+      "id": "truce-collapses",
+      "date": "2026-07-14",
+      "chokepoints": ["hormuz"],
+      "kind": "conflict",
+      "title": "Truce collapses and the blockade returns",
+      "summary": "Iran struck three ships on 6 and 7 July, the US answered with air strikes and reinstated its blockade on 14 July. Transits dropped back to about five a day.",
+      "source": {"name": "Al Jazeera", "url": "https://www.aljazeera.com/news/2026/8/27/how-a-95-percent-drop-in-hormuz-traffic-changed-global-shipping"}
+    },
+    {
+      "id": "houthi-blockade-saudi",
+      "date": "2026-07-20",
+      "chokepoints": ["bab", "suez"],
+      "kind": "conflict",
+      "title": "Houthis declare a blockade on Saudi Arabia",
+      "summary": "The group announced a blockade aimed at Bab el-Mandeb. Ship-tracking data showed crossings down about a quarter within nine days, from 42.5 a day to 32.1.",
+      "source": {"name": "Weathernews", "url": "https://sea.weathernews.com/resources/202607/171"}
+    },
+    {
+      "id": "msc-returns",
+      "date": "2026-08-17",
+      "chokepoints": ["suez", "bab"],
+      "kind": "market",
+      "title": "MSC ships return to the Red Sea",
+      "summary": "The largest container line resumed transits with its own ships, making at least seven Bab el-Mandeb passages in two weeks without a formal announcement.",
+      "source": {"name": "Linerlytica", "url": "https://www.linerlytica.com/post/msc-resumes-of-suez-red-sea-transits/"}
+    },
+    {
+      "id": "panama-el-nino-caps",
+      "date": "2026-09-03",
+      "chokepoints": ["panama"],
+      "kind": "climate",
+      "title": "El Niño brings Panama's caps back",
+      "summary": "Low rainfall led the canal authority to cut booking slots to 34 a day on 3 September and 32 on 15 September. On 28 September it eased to 33 from mid-October as rain improved.",
+      "source": {"name": "Panama Canal Authority", "url": "https://pancanal.com/en/panama-canal-adopts-additional-measures-to-address-reduced-precipitation-in-the-canal-watershed/"}
+    },
+    {
+      "id": "iran-seven-day-plan",
+      "date": "2026-09-25",
+      "chokepoints": ["hormuz"],
+      "kind": "policy",
+      "title": "Iran offers a seven-day plan to reopen Hormuz",
+      "summary": "Tehran proposed reopening the strait a week after fighting stops, the US blockade lifts and sanctions ease, with nuclear talks to follow. No deal has followed.",
+      "source": {"name": "Al Jazeera", "url": "https://www.aljazeera.com/news/2026/9/25/whats-in-irans-seven-day-plan-to-reopen-the-strait-of-hormuz"}
+    }
+  ]
+}
