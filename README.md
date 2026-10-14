@@ -23,6 +23,9 @@ the Cape of Good Hope are included to show where Suez traffic went.
 - **One chokepoint in detail.** Click a pin for its ships a day against normal,
   the cargo carried and the mix of ship types. Click the open map, or press
   Escape, to go back.
+- **Daily headlines.** A news card lists recent headlines from shipping trade
+  press that name a chokepoint, narrowed to the one you pick. They are matched
+  automatically and refreshed every day.
 - **A timeline of events**, each with a source link, from the Ever Given
   grounding to the Hormuz closure. Drag the chart or press play to move
   through time; Brent crude runs underneath.
@@ -51,6 +54,7 @@ library (three.js) and the land outlines load from a CDN.
 | `data/prices.json` | Brent crude (daily) and a deep-sea freight price index (monthly) | [FRED](https://fred.stlouisfed.org/) series `DCOILBRENTEU`, `PCU483111483111` |
 | `data/routes.json` | Shipping lanes and the routes ships are drawn along | IMF PortWatch global shipping routes |
 | `data/events.json` | Hand-curated events, each with a source link | See the file |
+| `data/news.json` | Headlines from the last 30 days that name a chokepoint | RSS feeds of shipping trade publications, listed in `scripts/fetch_news.py` |
 
 ### Keeping it current
 
@@ -58,9 +62,11 @@ PortWatch adds a week of counts at a time. A GitHub Actions workflow
 (`.github/workflows/update-data.yml`) runs `scripts/fetch_data.py` every day
 and commits the first two files only when the transit counts have changed, so
 the site gains a week of data about once a week with no one touching it. The
-script keeps the published file if a new pull looks incomplete.
+script keeps the published file if a new pull looks incomplete. The same job
+runs `scripts/fetch_news.py`, which adds the day's matching headlines to
+`data/news.json` and drops those older than 30 days.
 
-To refresh by hand, run `python3 scripts/fetch_data.py`. `scripts/build_routes.py`
+To refresh by hand, run `python3 scripts/fetch_data.py` and `python3 scripts/fetch_news.py`. `scripts/build_routes.py`
 rebuilds the routes and only needs rerunning if the route list changes.
 
 ## Things to know about the numbers
@@ -75,3 +81,5 @@ rebuilds the routes and only needs rerunning if the route list changes.
   dates before 2022.
 - The weekly summary reports what the counts did. It does not say why; the
   events on the timeline are curated by hand.
+- The news headlines are matched to chokepoints by name, automatically, and
+  nobody checks them, so the odd one may be beside the point.

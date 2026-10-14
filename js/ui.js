@@ -1,5 +1,5 @@
 // The cards floating over the map: headline figures, the week's summary or the
-// selected chokepoint, the list of chokepoints, the timeline and the map legend.
+// selected chokepoint, the list of chokepoints, the timeline, the news and the map legend.
 
 import { el, icon, TONE_ICON } from './dom.js';
 import { NORMAL_NOTE, statusOf } from './data.js';
@@ -29,6 +29,7 @@ const CARGO = {
 
 const EVENT_ICON = { conflict: 'alert', accident: 'anchor', climate: 'drop', policy: 'flag', market: 'chart', data: 'info' };
 const STALE_AFTER_DAYS = 21;   // the badge stops showing green once the newest day is older than this
+const NEWS_SHOWN = 8;          // headlines shown before "Show all"
 
 const sum = (values) => values.reduce((a, b) => a + b, 0);
 
@@ -50,6 +51,7 @@ export class Dashboard {
     this.buildDetail();
     this.buildTimeline();
     this.buildList();
+    this.buildNews();
     this.buildLegend();
     this.buildToolbar();
   }
@@ -227,6 +229,43 @@ export class Dashboard {
       ', estimated from ship transponder signals. Prices: FRED. ', NORMAL_NOTE));
   }
 
+  buildNews() {
+    const { news } = this.model;
+    const v = this.news = {
+      title: el('h2'),
+      list: el('ul', { class: 'news__list' }),
+      more: el('button', { class: 'text-button', type: 'button', onclick: () => { this.newsOpen = !this.newsOpen; this.updateNews(); } }),
+    };
+    const updated = news.fetched ? ` Updated daily, last on ${fmtDate(news.fetched)}.` : '';
+    document.getElementById('news').append(
+      el('header', { class: 'news__head' },
+        el('div', {}, v.title,
+          el('p', { class: 'muted', text: `Headlines from shipping trade press that name a chokepoint. Picked out automatically, not checked by hand.${updated}` })),
+        v.more),
+      v.list);
+  }
+
+  /** The headlines for the chokepoint picked, or for all six. */
+  updateNews() {
+    const { model } = this, v = this.news, c = model.byKey[this.shown];
+    const stories = model.news.stories.filter((story) => !c || story.chokepoints.includes(c.key));
+    v.title.textContent = c ? `In the news: ${c.short}` : 'In the news';
+    v.more.hidden = stories.length <= NEWS_SHOWN;
+    v.more.textContent = this.newsOpen ? 'Show fewer' : `Show all ${stories.length}`;
+    if (!stories.length) {
+      const days = model.news.keepDays;
+      v.list.replaceChildren(el('li', { class: 'news__none muted', text: c ? `No headlines about the ${c.name} in the past ${days} days.` : 'No headlines at the moment.' }));
+      return;
+    }
+    v.list.replaceChildren(...(this.newsOpen ? stories : stories.slice(0, NEWS_SHOWN)).map((story) => el('li', {},
+      el('a', { class: 'story', href: story.url, target: '_blank', rel: 'noopener' },
+        el('div', { class: 'story__tags' },
+          story.chokepoints.map((key) => el('span', { class: 'story__tag', text: model.byKey[key].short })),
+          icon('external', 12)),
+        el('div', { class: 'story__title', text: story.title }),
+        el('div', { class: 'story__source', text: `${story.source} · ${fmtDate(story.time)}` })))));
+  }
+
   buildLegend() {
     const lane = (ships) => el('li', {}, el('span', { class: 'legend__lane', style: `height:${laneWidth(ships).toFixed(1)}px` }), String(ships));
     document.getElementById('legend').append(
@@ -299,6 +338,8 @@ export class Dashboard {
       this.summary.node.hidden = Boolean(c);
       for (const node of this.timeline.keys.one) node.hidden = !c;
       for (const node of this.timeline.keys.all) node.hidden = Boolean(c);
+      this.newsOpen = false;
+      this.updateNews();
     }
     this.updateKpis(day);
     if (c) this.updateDetail(c, day); else this.updateSummary(day);

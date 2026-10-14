@@ -19,6 +19,8 @@ function dialog(title, ...body) {
 }
 
 const link = (href, text) => el('a', { href, target: '_blank', rel: 'noopener', text });
+/** [a, b, c] -> [a, ', ', b, ' and ', c], for a list of elements in running text. */
+const listOf = (items) => items.flatMap((item, i) => (i === 0 ? [item] : [i === items.length - 1 ? ' and ' : ', ', item]));
 
 // ---------------------------------------------------------------- method --
 
@@ -68,6 +70,12 @@ export function methodPanel(model) {
 
     section('Events',
       p('The events on the timeline are hand-picked, each with a link to its source. Figures in an event’s text come from the data on this page unless it names another source.')),
+
+    section('News headlines',
+      p('The news card lists recent headlines from the RSS feeds of shipping trade publications: ',
+        ...listOf(model.news.sources.map((source) => link(source.url, source.name))),
+        '. A headline goes under a chokepoint when it names it. “Panama Canal” counts but “Panama” alone does not, since Panama is also the world’s largest ship registry; the Red Sea and the Houthis count for Bab el-Mandeb. The matching is automatic and nobody checks it, so the odd headline may be beside the point.'),
+      p(`The list is refreshed once a day and keeps the past ${model.news.keepDays} days. Each headline links to the publisher’s own page.`)),
 
     section('Credits',
       p('Ship counts and shipping lanes: IMF PortWatch. Prices: FRED. Land outlines and country borders: Natural Earth. 3D drawing: three.js. The code is on ', link('https://github.com/BenVoliva/chokepoint-monitor', 'GitHub'), '.')));

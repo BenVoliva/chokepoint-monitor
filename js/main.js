@@ -7,6 +7,7 @@ import { MapScene } from './scene.js';
 import { Dashboard } from './ui.js';
 
 const PLAY_DAYS_PER_SECOND = 45;   // the whole record plays in about a minute
+const HUD_MIN = 440;               // the pinned cards stop shrinking at this height; the section below then slides over them
 const WIDE = window.matchMedia('(min-width: 900px)');
 
 async function start() {
@@ -100,7 +101,7 @@ async function start() {
       return;
     }
     const below = Math.max(0, Math.round(window.innerHeight - box('below').top));
-    root.style.setProperty('--below', `${below}px`);
+    root.style.setProperty('--below', `${Math.min(below, Math.max(0, window.innerHeight - HUD_MIN))}px`);
     scene.setLayout({
       top: box('topbar').bottom,
       right: window.innerWidth - box(state.selected ? 'detail' : 'summary').left,   // whichever of the two is showing

@@ -69,9 +69,11 @@ export async function loadData() {
     if (!res.ok) throw new Error(`data/${name}.json: HTTP ${res.status}`);
     return res.json();
   };
-  const [transits, prices, events, routes] = await Promise.all(
-    ['transits', 'prices', 'events', 'routes'].map(get));
-  return buildModel(transits, prices, events, routes);
+  const [transits, prices, events, routes, news] = await Promise.all([
+    ...['transits', 'prices', 'events', 'routes'].map(get),
+    get('news').catch(() => null),   // the headlines are extra: the page works without them
+  ]);
+  return buildModel(transits, prices, events, routes, news);
 }
 
 function parseDay(iso) {
@@ -91,7 +93,7 @@ function trailingMean(series, window) {
   return out;
 }
 
-function buildModel(transits, prices, events, routes) {
+function buildModel(transits, prices, events, routes, news) {
   const start = parseDay(transits.start);
   const days = Math.round((parseDay(transits.end) - start) / DAY) + 1;
   const dateAt = (i) => new Date(start + i * DAY);
@@ -253,5 +255,14 @@ function buildModel(transits, prices, events, routes) {
     network: routes.network,
     routeFlows,
     monthly,
+    /** Recent headlines that name a chokepoint (data/news.json), newest first. */
+    news: {
+      fetched: news ? new Date(news.fetched) : null,
+      keepDays: news?.keep_days ?? 30,
+      sources: news?.sources ?? [],
+      stories: (news?.stories ?? [])
+        .filter((s) => /^https?:\/\//i.test(s.url))   // only ordinary web links
+        .map((s) => ({ ...s, time: new Date(s.time), chokepoints: s.chokepoints.filter((key) => byKey[key]) })),
+    },
   };
 }

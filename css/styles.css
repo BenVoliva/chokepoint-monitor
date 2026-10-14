@@ -179,6 +179,7 @@ button { font: inherit; color: inherit; }
 .legend   { grid-column: 1; grid-row: 3; justify-self: start; align-self: end; }
 .timeline { grid-column: 1; }
 .list     { grid-column: 2; }
+.news     { grid-column: 1 / -1; }
 
 
 /* ---------------------------------------------------------- topbar ---- */
@@ -445,6 +446,31 @@ button { font: inherit; color: inherit; }
 .row__value { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .row__change { color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
 .list__source { margin-top: auto; padding: 8px 6px 0; color: var(--ink-3); font-size: 11px; }
+
+/* ------------------------------------------------------------ news ---- */
+
+.news { padding: 14px; }
+.news__head { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.news__head h2 { font-size: 14px; font-weight: 700; }
+.news__head p { margin-top: 1px; font-size: 11.5px; }
+.news__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; margin-top: 10px; }
+.news__none { padding: 6px 2px; }
+/* Tags, headline, then the source pinned to the bottom, so tiles in a row line up. */
+.story { display: flex; flex-direction: column; height: 100%; padding: 9px 11px 10px; border-radius: 11px; background: var(--wash); text-decoration: none; }
+.story:hover { background: var(--accent-wash); }
+.story__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 5px; }
+.story__tags .icon { margin-left: auto; color: var(--ink-3); }
+.story__source { margin-top: auto; padding-top: 6px; color: var(--ink-3); font-size: 11px; }
+.story__tag { padding: 1px 7px; border-radius: 999px; background: #fff; color: var(--accent); font-size: 10.5px; font-weight: 700; }
+.story__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin-top: 5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
 
 /* ---------------------------------------------------------- legend ---- */
 

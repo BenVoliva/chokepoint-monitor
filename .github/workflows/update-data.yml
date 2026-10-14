@@ -1,9 +1,10 @@
 name: Update data
 
-# IMF PortWatch adds a week of transit counts at a time, usually on a Tuesday
-# and sometimes later. Rather than guess the day, this looks every day and
-# commits only when the counts have changed, so the site gains a week of data
-# about once a week. Prices are refreshed in the same commit.
+# Runs every day. IMF PortWatch adds a week of transit counts at a time,
+# usually on a Tuesday and sometimes later, so rather than guess the day this
+# looks daily and commits the counts only when they have changed (prices ride
+# along in the same commit). The news headlines change most days, and are
+# committed whenever there is something new.
 on:
   schedule:
     - cron: "40 14 * * *"   # every day at 14:40 UTC
@@ -27,19 +28,31 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Leaves a file untouched unless the new pull is complete and different.
+      # Each script leaves its files untouched unless it has something complete and new.
       - name: Fetch the latest data
         run: python3 scripts/fetch_data.py
 
-      - name: Commit the data if the transit counts changed
+      - name: Fetch the news headlines
+        run: python3 scripts/fetch_news.py
+
+      - name: Commit whatever changed
         run: |
-          if git diff --quiet -- data/transits.json; then
-            echo "PortWatch has published nothing new."
+          message=""
+          if ! git diff --quiet -- data/transits.json; then
+            end=$(python3 -c "import json; print(json.load(open('data/transits.json'))['end'])")
+            git add data/transits.json data/prices.json
+            message="Update data to $end"
+          fi
+          if ! git diff --quiet -- data/news.json; then
+            git add data/news.json
+            message="${message:+$message and the news}"
+            message="${message:-Update the news}"
+          fi
+          if [ -z "$message" ]; then
+            echo "Nothing new today."
             exit 0
           fi
-          end=$(python3 -c "import json; print(json.load(open('data/transits.json'))['end'])")
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/transits.json data/prices.json
-          git commit -m "Update data to $end"
+          git commit -m "$message"
           git push
