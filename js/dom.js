@@ -52,6 +52,8 @@ const ICONS = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
   download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>',
+  panelHide: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M15 4.5v15M8.5 9.5L11 12l-2.5 2.5"/>',
+  panelShow: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M15 4.5v15M10.5 9.5L8 12l2.5 2.5"/>',
 };
 
 /** An icon as an inline SVG element. `name` is always one of the constants above. */

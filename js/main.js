@@ -12,7 +12,8 @@ const WIDE = window.matchMedia('(min-width: 900px)');
 
 async function start() {
   const model = await loadData();
-  const state = { day: model.latest, selected: null, playing: false, ship: null };   // selected: a chokepoint's key, or null for the overview
+  // selected: a chokepoint's key, or null for the overview. sideHidden: the right-hand card is tucked away.
+  const state = { day: model.latest, selected: null, playing: false, ship: null, sideHidden: false };
 
   const dashboard = new Dashboard({
     model,
@@ -24,6 +25,7 @@ async function start() {
       zoom: (factor) => scene.zoom(factor),
       focus: () => { if (state.selected) scene.flyTo(scene.closeUpView(state.selected)); },
       shipClose: () => scene.selectShip(null),
+      side: (hidden) => setSide(hidden, true),
       // Bring the timeline and the list up over the map, or send them back down.
       more: () => window.scrollTo({ top: window.scrollY > 8 ? 0 : document.documentElement.scrollHeight, behavior: 'smooth' }),
     },
@@ -54,7 +56,32 @@ async function start() {
   function select(key) {
     state.selected = key;
     scene.select(key);
+    if (key) setSide(false);   // picking one asks for its detail, so bring the card back if it was tucked away
     render();
+  }
+
+  /**
+   * Slide the right-hand card off the edge (styles.css, .side-hidden), or back.
+   * `byButton` moves the keyboard focus to whatever now offers the way back.
+   */
+  function setSide(hidden, byButton = false) {
+    if (state.sideHidden === hidden) return;
+    state.sideHidden = hidden;
+    document.body.classList.toggle('side-hidden', hidden);
+    followLayout(450);
+    if (!byButton) return;
+    if (hidden) document.getElementById('side-tab').focus();
+    else document.querySelector(`#${state.selected ? 'detail' : 'summary'} .side-toggle`).focus();
+  }
+
+  /** Refit the map on every frame for `ms`, so it follows cards that are still moving. */
+  function followLayout(ms) {
+    const end = performance.now() + ms;
+    const step = () => {
+      fitMap();
+      if (performance.now() < end) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   function setDay(day) {
@@ -104,7 +131,7 @@ async function start() {
     root.style.setProperty('--below', `${Math.min(below, Math.max(0, window.innerHeight - HUD_MIN))}px`);
     scene.setLayout({
       top: box('topbar').bottom,
-      right: window.innerWidth - box(state.selected ? 'detail' : 'summary').left,   // whichever of the two is showing
+      right: Math.max(0, window.innerWidth - box(state.selected ? 'detail' : 'summary').left),   // whichever of the two is showing; none once tucked away
       bottom: below,
       left: 0,
     }, [...document.querySelectorAll('.hud .card, .below .card')].map((card) => card.getBoundingClientRect()).filter((rect) => rect.width));

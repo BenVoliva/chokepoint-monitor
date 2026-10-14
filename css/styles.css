@@ -23,6 +23,7 @@
   --context: #5d6785;
 
   --radius: 16px;
+  --side: 340px;   /* the right-hand column of cards */
 
   /* How much of the section below the map shows on the first screen (its header
      row), and how much of it is on screen right now; main.js keeps --below current. */
@@ -150,7 +151,8 @@ button { font: inherit; color: inherit; }
   position: fixed;
   inset: 0 0 var(--below) 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) var(--side);
+  transition: grid-template-columns 0.35s ease;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 14px;
   padding: 14px;
@@ -175,7 +177,8 @@ button { font: inherit; color: inherit; }
 .topbar   { grid-column: 1 / -1; grid-row: 1; }
 .kpis     { grid-column: 1; grid-row: 2; }
 .toolbar  { grid-column: 1; grid-row: 3; justify-self: end; align-self: start; }
-.summary, .detail { grid-column: 2; grid-row: 2 / 4; align-self: start; max-height: 100%; overflow: auto; }
+.summary, .detail { grid-column: 2; grid-row: 2 / 4; align-self: start; width: var(--side); max-height: 100%; overflow: auto; transition: translate 0.35s ease, visibility 0s; }
+.side-tab { grid-column: 2; grid-row: 2; justify-self: end; align-self: start; }
 .legend   { grid-column: 1; grid-row: 3; justify-self: start; align-self: end; }
 .timeline { grid-column: 1; }
 .list     { grid-column: 2; }
@@ -273,8 +276,34 @@ button { font: inherit; color: inherit; }
 .row__change.is-notable { color: var(--ink); font-weight: 700; }
 .summary__note { margin-top: 8px; color: var(--ink-3); font-size: 11px; }
 
-.detail__head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
-.detail__actions { display: flex; margin: -4px -6px 0 0; }
+.card__head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.card__actions { display: flex; margin: -4px -6px 0 0; }
+
+/* The right-hand card can be tucked away for a wider map: its column closes,
+   the card slides off the edge, and a tab is left to bring it back. */
+.side-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 13px 9px 10px;
+  border: 0;
+  border-radius: 13px;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s, visibility 0s 0.2s;
+}
+.side-tab .icon { color: var(--accent); }
+.side-tab:hover { background: #fff; color: var(--accent); }
+@media (min-width: 900px) {
+  .side-hidden .hud { grid-template-columns: minmax(0, 1fr) 0px; }
+  .side-hidden .summary, .side-hidden .detail { translate: 16px 0; visibility: hidden; transition: translate 0.35s ease, visibility 0s 0.35s; }
+  .side-hidden .side-tab { visibility: visible; opacity: 1; transition: opacity 0.2s 0.25s, visibility 0s; }
+}
 .detail__why { margin-top: 2px; color: var(--ink-2); }
 .detail__status { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
 .detail__share { color: var(--ink-2); }
@@ -647,8 +676,9 @@ button { font: inherit; color: inherit; }
   .legend { max-width: none; }
   .kpi { flex: 1 1 150px; }
   .kpi:nth-child(4) { display: flex; }
-  .summary, .detail { max-height: none; }
+  .summary, .detail { width: auto; max-height: none; }
   .summary, .detail, .legend, .kpis { align-self: stretch; }
+  .side-tab, .side-toggle { display: none; }   /* stacked, the cards sit under the map rather than over it */
 }
 
 /* Phones: the map is small, so keep only what is needed to read it. */
@@ -666,5 +696,5 @@ button { font: inherit; color: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .meter > span, .map-label, .is-ready .loading, .timeline__more .icon { transition: none; }
+  .meter > span, .map-label, .is-ready .loading, .timeline__more .icon, .hud, .summary, .detail, .side-tab { transition: none !important; }
 }

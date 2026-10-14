@@ -13,7 +13,8 @@ the Cape of Good Hope are included to show where Suez traffic went.
 
 - **A 3D map** with a pin on each chokepoint, coloured by how far its traffic
   is from normal. Lanes thicken with traffic and ships move along them. Zoom in
-  for coastlines, country borders and names.
+  for coastlines, country borders and names, or slide the card on the right
+  out of the way to give the map the whole width.
 - **The week in brief.** With nothing selected, a card sums up the latest week
   in a few sentences written from the data, with each chokepoint's change on
   the week and over four weeks.

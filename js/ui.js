@@ -37,7 +37,8 @@ export class Dashboard {
   /**
    * @param {object} o
    * @param {object} o.model
-   * @param {object} o.on  handlers: select(key or null), day(index), play(), home(), zoom(factor), focus(), shipClose(), more()
+   * @param {object} o.on  handlers: select(key or null), day(index), play(), home(), zoom(factor), focus(), shipClose(), more(),
+   *   side(hidden): tuck the right-hand card away for a wider map, or bring it back
    */
   constructor({ model, on }) {
     this.model = model;
@@ -49,6 +50,7 @@ export class Dashboard {
     this.buildKpis();
     this.buildSummary();
     this.buildDetail();
+    this.buildSideTab();
     this.buildTimeline();
     this.buildList();
     this.buildNews();
@@ -116,7 +118,7 @@ export class Dashboard {
       return r.button;
     });
     s.node.append(
-      el('header', {}, s.when, s.title),
+      el('header', { class: 'card__head' }, el('div', {}, s.when, s.title), el('div', { class: 'card__actions' }, this.hideButton())),
       s.lines,
       el('div', { class: 'moves' },
         el('div', { class: 'moves__head', 'aria-hidden': 'true' },
@@ -145,10 +147,11 @@ export class Dashboard {
     };
     const row = (label, value) => el('div', {}, typeof label === 'string' ? el('dt', { text: label }) : label, value);
     d.node.append(
-      el('header', { class: 'detail__head' },
+      el('header', { class: 'card__head' },
         el('div', {}, d.kind, d.name),
-        el('div', { class: 'detail__actions' },
+        el('div', { class: 'card__actions' },
           el('button', { class: 'icon-button', type: 'button', 'aria-label': 'Fly to this chokepoint', title: 'Fly to this chokepoint', onclick: () => this.on.focus() }, icon('locate', 18)),
+          this.hideButton(),
           el('button', { class: 'icon-button', type: 'button', 'aria-label': 'Close and show all six chokepoints', title: 'Close', onclick: () => this.on.select(null) }, icon('close', 18)))),
       d.why,
       el('div', { class: 'detail__status' }, d.chip, d.share),
@@ -162,6 +165,20 @@ export class Dashboard {
       el('section', { class: 'mix' },
         el('h3', { text: 'Ships in the last 7 days' }),
         d.mixBar, d.mixLegend));
+  }
+
+  /** The button on the right-hand cards that slides them off the edge, for a wider map. */
+  hideButton() {
+    return el('button', { class: 'icon-button side-toggle', type: 'button', 'aria-label': 'Hide this panel', title: 'Hide this panel for a wider map', onclick: () => this.on.side(true) },
+      icon('panelHide', 18));
+  }
+
+  /** The tab left at the right edge while the card is tucked away; it brings the card back. */
+  buildSideTab() {
+    this.sideLabel = el('span');
+    this.sideTab = el('button', { class: 'side-tab card', id: 'side-tab', type: 'button', onclick: () => this.on.side(false) },
+      icon('panelShow', 16), this.sideLabel);
+    document.querySelector('.hud').append(this.sideTab);
   }
 
   buildTimeline() {
@@ -340,6 +357,8 @@ export class Dashboard {
       for (const node of this.timeline.keys.all) node.hidden = Boolean(c);
       this.newsOpen = false;
       this.updateNews();
+      this.sideLabel.textContent = c ? c.short : 'This week';
+      this.sideTab.setAttribute('aria-label', c ? `Show the ${c.name} panel` : 'Show the week’s summary');
     }
     this.updateKpis(day);
     if (c) this.updateDetail(c, day); else this.updateSummary(day);
