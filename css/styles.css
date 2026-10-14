@@ -60,7 +60,9 @@ a { color: inherit; }
 button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .muted { color: var(--ink-3); }
-.icon { flex: none; }
+/* Icons are decoration: a click on one belongs to its button. (Some are redrawn while the
+   timeline plays, and a click whose target vanishes between press and release is lost.) */
+.icon { flex: none; pointer-events: none; }
 
 /* ------------------------------------------------------------ map ---- */
 

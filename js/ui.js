@@ -402,8 +402,11 @@ export class Dashboard {
 
   updateTimeline(c, { day, playing }) {
     const t = this.timeline;
-    t.play.replaceChildren(icon(playing ? 'pause' : 'play', 18));
-    t.play.setAttribute('aria-label', playing ? 'Pause' : 'Play the timeline');
+    if (playing !== this.playShown) {   // only on a change: this runs every frame while playing
+      this.playShown = playing;
+      t.play.replaceChildren(icon(playing ? 'pause' : 'play', 18));
+      t.play.setAttribute('aria-label', playing ? 'Pause' : 'Play the timeline');
+    }
     t.date.textContent = fmtDate(this.model.dateAt(day));
     t.title.textContent = c ? `${c.name} · ships a day` : 'All six chokepoints · share of normal';
 
