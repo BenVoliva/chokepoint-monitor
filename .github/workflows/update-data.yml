@@ -1,0 +1,45 @@
+name: Update data
+
+# IMF PortWatch adds a week of transit counts at a time, usually on a Tuesday
+# and sometimes later. Rather than guess the day, this looks every day and
+# commits only when the counts have changed, so the site gains a week of data
+# about once a week. Prices are refreshed in the same commit.
+on:
+  schedule:
+    - cron: "40 14 * * *"   # every day at 14:40 UTC
+  workflow_dispatch:        # and by hand, from the Actions tab
+
+permissions:
+  contents: write   # to push the refreshed data files
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Leaves a file untouched unless the new pull is complete and different.
+      - name: Fetch the latest data
+        run: python3 scripts/fetch_data.py
+
+      - name: Commit the data if the transit counts changed
+        run: |
+          if git diff --quiet -- data/transits.json; then
+            echo "PortWatch has published nothing new."
+            exit 0
+          fi
+          end=$(python3 -c "import json; print(json.load(open('data/transits.json'))['end'])")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/transits.json data/prices.json
+          git commit -m "Update data to $end"
+          git push

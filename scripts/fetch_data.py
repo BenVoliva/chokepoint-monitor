@@ -5,9 +5,11 @@
                       (IMF PortWatch)
   data/prices.json    Brent crude and a deep-sea freight price index (FRED)
 
-Run on a schedule by .github/workflows/update-data.yml; also fine to run by
-hand.  Each file is only replaced when the new pull looks complete, so a bad
-day at either source leaves the published data as it was.  Standard library only.
+Run every day by .github/workflows/update-data.yml; also fine to run by hand.
+Each file is only replaced when the new pull looks complete, so a bad day at
+either source leaves the published data as it was.  A file whose figures have
+not changed is left alone, which is how the workflow knows whether there is
+anything new to commit.  Standard library only.
 """
 import csv
 import io
@@ -187,8 +189,13 @@ def filled(node):
     return 0 if node is None or isinstance(node, (str, bool)) else 1
 
 
+def figures(data):
+    """A data file without the time it was fetched: what has to differ for it to count as new."""
+    return {key: value for key, value in data.items() if key != "fetched"}
+
+
 def publish(name, build):
-    """Build one data file and replace the published copy if it is no worse."""
+    """Build one data file and replace the published copy if it is new and no worse."""
     path = DATA / name
     try:
         new = build()
@@ -196,6 +203,9 @@ def publish(name, build):
             old = json.loads(path.read_text())
             if filled(new) < filled(old) * 0.98:
                 raise RuntimeError(f"new pull has {filled(new):,} values, published file has {filled(old):,}")
+            if figures(new) == figures(old):
+                print(f"{name}: nothing new")
+                return True
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(new, separators=(",", ":")))
         tmp.replace(path)

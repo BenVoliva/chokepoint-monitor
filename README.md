@@ -52,7 +52,15 @@ library (three.js) and the land outlines load from a CDN.
 | `data/routes.json` | Shipping lanes and the routes ships are drawn along | IMF PortWatch global shipping routes |
 | `data/events.json` | Hand-curated events, each with a source link | See the file |
 
-To refresh the first two, run `python3 scripts/fetch_data.py`. `scripts/build_routes.py`
+### Keeping it current
+
+PortWatch adds a week of counts at a time. A GitHub Actions workflow
+(`.github/workflows/update-data.yml`) runs `scripts/fetch_data.py` every day
+and commits the first two files only when the transit counts have changed, so
+the site gains a week of data about once a week with no one touching it. The
+script keeps the published file if a new pull looks incomplete.
+
+To refresh by hand, run `python3 scripts/fetch_data.py`. `scripts/build_routes.py`
 rebuilds the routes and only needs rerunning if the route list changes.
 
 ## Things to know about the numbers
