@@ -13,10 +13,10 @@ const STEEL = '#9aa6c6';
 /** Ship kinds drawn on the map. Hull colours match the chart legend; general
  *  cargo and vehicle carriers share one neutral "other" model. */
 export const SHIP_KINDS = [
-  { key: 'container', label: 'Container', color: '#2a78d6', types: ['container'] },
-  { key: 'tanker', label: 'Tanker', color: '#eb6834', types: ['tanker'] },
-  { key: 'dry_bulk', label: 'Dry bulk', color: '#1baf7a', types: ['dry_bulk'] },
-  { key: 'other', label: 'Other cargo', color: '#7d88a8', types: ['general_cargo', 'roro'] },
+  { key: 'container', label: 'Container', name: 'Container ship', plural: 'container ships', color: '#2a78d6', types: ['container'] },
+  { key: 'tanker', label: 'Tanker', name: 'Tanker', plural: 'tankers', color: '#eb6834', types: ['tanker'] },
+  { key: 'dry_bulk', label: 'Dry bulk', name: 'Bulk carrier', plural: 'bulk carriers', color: '#1baf7a', types: ['dry_bulk'] },
+  { key: 'other', label: 'Other cargo', name: 'Cargo ship', plural: 'general cargo ships and vehicle carriers', color: '#7d88a8', types: ['general_cargo', 'roro'] },
 ];
 
 function tint(geometry, hex) {

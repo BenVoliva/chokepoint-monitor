@@ -48,6 +48,10 @@ const ICONS = {
   flag: '<path d="M6 21V4M6 5h11.5l-2.2 3.5 2.2 3.5H6"/>',
   anchor: '<circle cx="12" cy="5.5" r="2"/><path d="M12 7.5V20M5 13.5c0 4 3 6.5 7 6.5s7-2.5 7-6.5M9 11h6"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.4v.4"/>',
+  table: '<path d="M4 5h16v14H4zM4 10h16M4 14.5h16M10 5v14"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  chevron: '<path d="M6 9.5l6 6 6-6"/>',
+  download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>',
 };
 
 /** An icon as an inline SVG element. `name` is always one of the constants above. */

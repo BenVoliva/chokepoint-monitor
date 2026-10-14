@@ -39,6 +39,18 @@ export function fmtTonnage(kt) {
   return `${Math.round(kt)} kt`;
 }
 
+/** Tonnes to two significant figures: 52,340 -> "52,000 tonnes". */
+export function fmtTonnes(tonnes) {
+  if (!Number.isFinite(tonnes) || tonnes <= 0) return '\u2013';
+  const step = 10 ** Math.max(0, Math.floor(Math.log10(tonnes)) - 1);
+  return `${(Math.round(tonnes / step) * step).toLocaleString('en-GB')} tonnes`;
+}
+
+/** ['a', 'b', 'c'] -> "a, b and c" */
+export function fmtList(items) {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 export function fmtDollars(value) {
   return Number.isFinite(value) ? `$${value.toFixed(value >= 100 ? 0 : 2)}` : '–';
 }

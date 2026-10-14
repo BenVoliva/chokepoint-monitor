@@ -1,12 +1,14 @@
-// The cards floating over the map: headline figures, the selected chokepoint,
-// the list of chokepoints, the timeline and the map legend.
+// The cards floating over the map: headline figures, the week's summary or the
+// selected chokepoint, the list of chokepoints, the timeline and the map legend.
 
 import { el, icon, TONE_ICON } from './dom.js';
 import { NORMAL_NOTE, statusOf } from './data.js';
-import { fmtDate, fmtMonth, monthName, fmtCount, fmtChange, fmtTonnage, fmtDollars } from './format.js';
+import { weeklyBrief, NOTABLE } from './brief.js';
+import { fmtDate, fmtMonth, monthName, fmtCount, fmtChange, fmtTonnage, fmtTonnes, fmtList, fmtDollars } from './format.js';
 import { TimelineChart } from './timeline.js';
 import { SHIP_KINDS } from './ships.js';
-import { SHIPS_PER_ICON } from './scene.js';
+import { SHIPS_PER_ICON, KM_PER_DAY, laneWidth } from './scene.js';
+import { methodPanel, TablePanel } from './panels.js';
 
 const PLACES = {
   suez: { kind: 'Canal · Egypt', why: 'The short cut between Asia and Europe.' },
@@ -26,6 +28,7 @@ const CARGO = {
 };
 
 const EVENT_ICON = { conflict: 'alert', accident: 'anchor', climate: 'drop', policy: 'flag', market: 'chart', data: 'info' };
+const STALE_AFTER_DAYS = 21;   // the badge stops showing green once the newest day is older than this
 
 const sum = (values) => values.reduce((a, b) => a + b, 0);
 
@@ -33,14 +36,17 @@ export class Dashboard {
   /**
    * @param {object} o
    * @param {object} o.model
-   * @param {object} o.on  handlers: select(key), day(index), play(), home(), zoom(factor), focus()
+   * @param {object} o.on  handlers: select(key or null), day(index), play(), home(), zoom(factor), focus(), shipClose(), more()
    */
   constructor({ model, on }) {
     this.model = model;
     this.on = on;
     this.tooltip = document.getElementById('tooltip');
+    this.method = methodPanel(model);
+    this.table = new TablePanel(model);
     this.buildTopbar();
     this.buildKpis();
+    this.buildSummary();
     this.buildDetail();
     this.buildTimeline();
     this.buildList();
@@ -52,9 +58,18 @@ export class Dashboard {
 
   buildTopbar() {
     const latest = this.model.dateAt(this.model.latest);
-    document.getElementById('asof').append(
+    const asof = document.getElementById('asof');
+    asof.append(
       el('span', { class: 'asof__dot' }),
-      el('span', {}, 'Data to ', el('strong', { text: fmtDate(latest) })));
+      el('span', {}, el('span', { class: 'asof__label', text: 'Data to ' }), el('strong', { text: fmtDate(latest) })));
+    // New counts come weekly, a few days in arrears. Much older than that and the refresh has stalled: say so.
+    const age = Math.floor((Date.now() - latest) / 86400000);
+    if (age > STALE_AFTER_DAYS) {
+      asof.classList.add('is-stale');
+      asof.title = `The latest data is ${age} days old. IMF PortWatch normally publishes new counts once a week.`;
+    }
+    document.getElementById('topbar-actions').append(
+      el('button', { class: 'text-button', type: 'button', onclick: () => this.method.showModal() }, icon('info', 15), el('span', { text: 'How this works' })));
   }
 
   buildKpis() {
@@ -78,8 +93,39 @@ export class Dashboard {
     };
   }
 
+  /** The card shown while no chokepoint is picked: the week in a few sentences, then each one's figures. */
+  buildSummary() {
+    const s = this.summary = {
+      node: document.getElementById('summary'),
+      when: el('div', { class: 'eyebrow' }),
+      title: el('h2'),
+      lines: el('ul', { class: 'summary__lines' }),
+      rows: {},
+    };
+    const rows = this.model.chokepoints.map((c) => {
+      const r = s.rows[c.key] = {
+        tone: el('span', { class: 'row__tone' }),
+        value: el('span', { class: 'row__value' }),
+        week: el('span', { class: 'row__change' }),
+        month: el('span', { class: 'row__change' }),
+      };
+      r.button = el('button', { class: 'row row--moves', type: 'button', onclick: () => this.on.select(c.key) },
+        r.tone, el('span', { class: 'row__name', text: c.short }), r.value, r.week, r.month);
+      return r.button;
+    });
+    s.node.append(
+      el('header', {}, s.when, s.title),
+      s.lines,
+      el('div', { class: 'moves' },
+        el('div', { class: 'moves__head', 'aria-hidden': 'true' },
+          el('span', { text: 'Ships a day' }), el('span', { text: 'Week' }), el('span', { text: 'Month' })),
+        rows),
+      el('p', { class: 'summary__note', text: 'Week: the last 7 days against the 7 before. Month: the last 28 days against the 28 before. Pick a chokepoint for its detail.' }));
+  }
+
   buildDetail() {
     const d = this.detail = {
+      node: document.getElementById('detail'),
       kind: el('div', { class: 'eyebrow' }),
       name: el('h2'),
       why: el('p', { class: 'detail__why' }),
@@ -96,10 +142,12 @@ export class Dashboard {
       mixLegend: el('ul', { class: 'mix__legend' }),
     };
     const row = (label, value) => el('div', {}, typeof label === 'string' ? el('dt', { text: label }) : label, value);
-    document.getElementById('detail').append(
+    d.node.append(
       el('header', { class: 'detail__head' },
         el('div', {}, d.kind, d.name),
-        el('button', { class: 'icon-button', type: 'button', 'aria-label': 'Fly to this chokepoint', title: 'Fly to this chokepoint', onclick: () => this.on.focus() }, icon('locate', 18))),
+        el('div', { class: 'detail__actions' },
+          el('button', { class: 'icon-button', type: 'button', 'aria-label': 'Fly to this chokepoint', title: 'Fly to this chokepoint', onclick: () => this.on.focus() }, icon('locate', 18)),
+          el('button', { class: 'icon-button', type: 'button', 'aria-label': 'Close and show all six chokepoints', title: 'Close', onclick: () => this.on.select(null) }, icon('close', 18)))),
       d.why,
       el('div', { class: 'detail__status' }, d.chip, d.share),
       d.meter,
@@ -123,14 +171,22 @@ export class Dashboard {
       chart: el('div', { class: 'timeline__chart' }),
     };
     const key = (kind, label) => el('span', {}, el('i', { class: `key key--${kind}` }), label);
+    // The chart has two views, each with its own key: one chokepoint, or all six compared.
+    t.keys = {
+      one: [key('series', '7-day average'), key('baseline', 'Normal level')],
+      all: [key('compare', 'Each chokepoint, % of its normal')],
+    };
     document.getElementById('timeline').append(
       el('header', { class: 'timeline__head' },
         t.play,
         el('div', { class: 'timeline__when' }, t.date, t.title),
         el('div', { class: 'timeline__keys' },
-          key('series', '7-day average'),
-          key('baseline', 'Normal level'),
-          key('event', 'Event'))),
+          t.keys.one, t.keys.all,
+          key('event', 'Event'),
+          el('button', { class: 'text-button', type: 'button', title: 'See these figures as a table', onclick: () => this.table.open(this.shown, this.day) },
+            icon('table', 15), el('span', { text: 'Table' })),
+          el('button', { class: 'icon-button timeline__more', type: 'button', 'aria-label': 'Show or hide the chart and the list of chokepoints', title: 'Show or hide the chart and the list', onclick: () => this.on.more() },
+            icon('chevron', 18)))),
       t.strip,
       t.chart);
     this.chart = new TimelineChart({
@@ -139,6 +195,7 @@ export class Dashboard {
       model: this.model,
       onDay: (day) => this.on.day(day),
       onEvent: (event) => this.on.day(event.index),
+      onPick: (key) => this.on.select(key),
     });
   }
 
@@ -171,10 +228,12 @@ export class Dashboard {
   }
 
   buildLegend() {
+    const lane = (ships) => el('li', {}, el('span', { class: 'legend__lane', style: `height:${laneWidth(ships).toFixed(1)}px` }), String(ships));
     document.getElementById('legend').append(
       el('ul', { class: 'legend__kinds' }, SHIP_KINDS.map((kind) =>
         el('li', {}, el('span', { class: 'swatch', style: `background:${kind.color}` }), kind.label))),
-      el('p', { class: 'legend__note', text: `Ships are illustrative: each stands for about ${SHIPS_PER_ICON} vessels at sea, scaled to the daily counts.` }));
+      el('ul', { class: 'legend__lanes' }, el('li', { text: 'Lane thickness, ships a day:' }), lane(10), lane(50), lane(200)),
+      el('p', { class: 'legend__note', text: `Ships and lanes are illustrative. Each ship stands for about ${SHIPS_PER_ICON} at sea; click one for details.` }));
   }
 
   buildToolbar() {
@@ -186,23 +245,86 @@ export class Dashboard {
       button('globe', 'World view', () => this.on.home()));
   }
 
+  /**
+   * Fill the card that follows a picked ship; null clears it. A drawn ship is a
+   * stand-in for many, so the figures are averages for its type, not one vessel's.
+   * @param {HTMLElement} card
+   * @param {{route: string, kind: string, forward: boolean}|null} ship
+   */
+  showShip(card, ship, day) {
+    const stamp = ship ? `${ship.route}|${ship.kind}|${ship.forward}|${day}` : null;
+    if (stamp === this.shipStamp) return;
+    this.shipStamp = stamp;
+    if (!ship) { card.replaceChildren(); return; }
+
+    const { model } = this;
+    const route = model.routes.find((r) => r.key === ship.route);
+    const kind = SHIP_KINDS.find((k) => k.key === ship.kind);
+    const place = model.byKey[route.mix];
+    const [from, to] = ship.forward ? [route.from, route.to] : [route.to, route.from];
+    const via = (ship.forward ? route.chokepoints : [...route.chokepoints].reverse()).map((key) => model.byKey[key].short);
+    // Cargo per ship: the week's estimated tonnage for this type over the ships counted, or a month's if the week had none.
+    let span = 7, seen = place.sum(kind.types, day, span);
+    if (!seen.ships) { span = 28; seen = place.sum(kind.types, day, span); }
+    const row = (label, value) => el('div', {}, el('dt', { text: label }), el('dd', { text: value }));
+    card.replaceChildren(
+      el('header', {},
+        el('span', { class: 'swatch', style: `background:${kind.color}` }),
+        el('strong', { text: kind.name }),
+        el('button', { class: 'icon-button', type: 'button', 'aria-label': 'Close', onclick: () => this.on.shipClose() }, icon('close', 15))),
+      el('p', { class: 'ship-card__route', text: `${from[0].toUpperCase()}${from.slice(1)} to ${to}, via ${fmtList(via)}` }),
+      el('dl', { class: 'rows' },
+        row('Typical cargo', seen.ships ? `about ${fmtTonnes(seen.kt * 1000 / seen.ships)}` : 'none recorded'),
+        row(`Ships like this at ${place.short}`, `${fmtCount(seen.ships / span)} a day`),
+        row('Voyage', `about ${fmtCount(Math.round(route.km / 100) * 100)} km, ${Math.round(route.km / KM_PER_DAY)} days at sea`)),
+      el('p', { class: 'ship-card__note' },
+        `A stand-in for about ${SHIPS_PER_ICON} ships at sea. `,
+        el('span', { class: 'ship-card__more', text: `PortWatch counts ships but does not track them, so these are averages for ${kind.plural} passing ${place.short} in the ${span === 7 ? 'week' : 'four weeks'} to ${fmtDate(model.dateAt(day))}.` })));
+  }
+
   // --------------------------------------------------------------- update --
 
-  /** @param {{day: number, selected: string, playing: boolean}} state */
+  /** @param {{day: number, selected: string|null, playing: boolean}} state  `selected` is null for the overview */
   update(state) {
     const { model } = this;
     const { day } = state;
-    const c = model.byKey[state.selected];
-    if (this.shown !== c.key) {
-      this.shown = c.key;
-      this.relevant = model.events.filter((e) => !e.chokepoints.length || e.chokepoints.includes(c.key));
+    this.day = day;
+    const c = model.byKey[state.selected] ?? null, shown = c?.key ?? null;
+    if (this.shown !== shown) {
+      this.shown = shown;
+      this.relevant = c ? model.events.filter((e) => !e.chokepoints.length || e.chokepoints.includes(c.key)) : model.events;
       this.chart.show(c, this.relevant);
-      for (const [key, row] of Object.entries(this.rows)) row.button.classList.toggle('is-selected', key === c.key);
+      for (const [key, row] of Object.entries(this.rows)) row.button.classList.toggle('is-selected', key === shown);
+      this.detail.node.hidden = !c;
+      this.summary.node.hidden = Boolean(c);
+      for (const node of this.timeline.keys.one) node.hidden = !c;
+      for (const node of this.timeline.keys.all) node.hidden = Boolean(c);
     }
     this.updateKpis(day);
-    this.updateDetail(c, day);
+    if (c) this.updateDetail(c, day); else this.updateSummary(day);
     this.updateList(day);
     this.updateTimeline(c, state);
+  }
+
+  updateSummary(day) {
+    const { model } = this, s = this.summary;
+    const { lines, rows } = weeklyBrief(model, day);
+    s.when.textContent = day === model.latest ? 'This week · latest data' : 'Looking back';
+    s.title.textContent = `Week to ${fmtDate(model.dateAt(day))}`;
+    s.lines.replaceChildren(...lines.map((text) => el('li', { text })));
+    for (const { c, now, status, week, month } of rows) {
+      const row = s.rows[c.key];
+      row.tone.dataset.tone = status.tone;
+      row.tone.replaceChildren(icon(TONE_ICON[status.tone], 13));
+      row.tone.title = status.label;
+      row.value.textContent = fmtCount(now);
+      for (const [span, move] of [['week', week], ['month', month]]) {
+        row[span].textContent = fmtChange(move.ratio);
+        row[span].classList.toggle('is-notable', move.counts && Math.abs(move.ratio - 1) >= NOTABLE[span]);
+      }
+      row.button.setAttribute('aria-label',
+        `${c.name}: ${fmtCount(now)} ships a day, ${status.label}; ${fmtChange(week.ratio)} on the week, ${fmtChange(month.ratio)} over four weeks`);
+    }
   }
 
   updateKpis(day) {
@@ -283,7 +405,7 @@ export class Dashboard {
     t.play.replaceChildren(icon(playing ? 'pause' : 'play', 18));
     t.play.setAttribute('aria-label', playing ? 'Pause' : 'Play the timeline');
     t.date.textContent = fmtDate(this.model.dateAt(day));
-    t.title.textContent = `${c.name} · ships a day`;
+    t.title.textContent = c ? `${c.name} · ships a day` : 'All six chokepoints · share of normal';
 
     // The strip narrates: it always shows the latest marked event up to this date.
     let active = null;
@@ -291,7 +413,7 @@ export class Dashboard {
     this.chart.setDay(day, active);
     // After a year without a new one, say so rather than leave it looking current.
     const old = active && day - active.index > 365;
-    const stamp = `${c.key}|${active?.id}|${old}`;
+    const stamp = `${this.shown}|${active?.id}|${old}`;
     if (stamp === this.stripStamp) return;
     this.stripStamp = stamp;
     if (!active) {

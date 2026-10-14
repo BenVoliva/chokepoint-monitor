@@ -21,6 +21,16 @@
       "source": {"name": "Al Jazeera", "url": "https://www.aljazeera.com/news/2019/07/iran-seized-british-oil-tanker-gulf-190719180058275.html"}
     },
     {
+      "id": "portwatch-glitch-2020",
+      "date": "2020-01-26",
+      "end": "2020-02-02",
+      "chokepoints": ["panama", "cape", "suez", "malacca", "bab"],
+      "kind": "data",
+      "title": "A week of faulty counts",
+      "summary": "From 26 January to 2 February 2020 PortWatch's counts jump at five of the six chokepoints at once, to three or four times normal at Panama and the Cape. Panama cannot physically pass that many ships, so this is a fault in the source data, not a surge in traffic.",
+      "source": {"name": "IMF PortWatch (pattern in the data)", "url": "https://portwatch.imf.org/"}
+    },
+    {
       "id": "covid-pandemic",
       "date": "2020-03-11",
       "chokepoints": [],

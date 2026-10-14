@@ -22,8 +22,11 @@
 <body>
   <canvas id="map" aria-label="Tilted 3D world map with shipping lanes, moving ships and a pin on each chokepoint"></canvas>
   <div id="pin-labels" class="pin-labels"></div>
+  <div id="overlay" class="overlay"></div>
 
-  <main class="hud">
+  <main class="page">
+    <!-- Cards pinned over the map. -->
+    <div class="hud">
     <header class="topbar card" id="topbar">
       <a class="brand" href="./" aria-label="Chokepoint Monitor, home">
         <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
@@ -35,6 +38,7 @@
         <span>Chokepoint Monitor</span>
       </a>
       <p class="topbar__tagline">Ships through the world's narrowest sea lanes, day by day since 2019</p>
+      <div class="topbar__actions" id="topbar-actions"></div>
       <div class="asof" id="asof" title="IMF PortWatch publishes new counts once a week, a few days in arrears"></div>
       <a class="icon-button" href="https://github.com/BenVoliva/chokepoint-monitor" target="_blank" rel="noopener" aria-label="Source code on GitHub" title="Source code on GitHub">
         <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8l-4.5 4L9 16M15 8l4.5 4L15 16"/></svg>
@@ -43,10 +47,18 @@
 
     <section class="kpis" id="kpis" aria-label="Headline figures"></section>
     <nav class="toolbar card" id="toolbar" aria-label="Map view"></nav>
-    <aside class="detail card" id="detail" aria-label="Selected chokepoint"></aside>
+    <!-- One of these two shows at a time: the week's summary, or the chokepoint picked on the map. -->
+    <aside class="summary card" id="summary" aria-label="The week at all six chokepoints"></aside>
+    <aside class="detail card" id="detail" aria-label="Selected chokepoint" hidden></aside>
     <aside class="legend card" id="legend" aria-label="Map legend"></aside>
-    <section class="timeline card" id="timeline" aria-label="Timeline"></section>
-    <section class="list card" id="list" aria-label="All chokepoints"></section>
+    </div>
+
+    <!-- The first screen is the map; the timeline and the list sit just below it, their top edge showing. -->
+    <div class="stage"></div>
+    <div class="below" id="below">
+      <section class="timeline card" id="timeline" aria-label="Timeline"></section>
+      <section class="list card" id="list" aria-label="All chokepoints"></section>
+    </div>
   </main>
 
   <div class="tooltip" id="tooltip" role="status" hidden></div>

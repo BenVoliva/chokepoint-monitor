@@ -9,7 +9,7 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { KX, WORLD_WIDTH, project, loadLand } from './geo.js';
 import { SHIP_KINDS, buildShipModels } from './ships.js';
-import { MAP_LABELS } from './maplabels.js';
+import { MAP_LABELS, COUNTRY_NAMES } from './maplabels.js';
 
 const PALETTE = {
   sky: 0xf1f4fd,
@@ -17,6 +17,7 @@ const PALETTE = {
   grid: 0xcad7f8,
   landTop: 0xf3f6fd,
   landSide: 0xd3dcf5,
+  border: 0xb0bde4,
   network: 0xa3b6ee,
   lane: 0x4f79ec,
   laneDash: 0xffffff,
@@ -29,7 +30,7 @@ const COPIES = [-1, 0, 1];              // the world repeats east and west so th
 const HOME = { polar: 0.6, azimuth: 0 };
 /** The world view frames these [lon, lat] points: the Americas to East Asia, the Cape to northern Europe. */
 const HOME_FRAME = [[-98, 28], [-82, -6], [141, 38], [124, -8], [19, -36], [2, 58]];
-const DISTANCE = { min: 14, max: 340 };
+const DISTANCE = { min: 14, max: 340, fit: 900 };   // fit: how far back the world view may sit on a narrow screen
 const FINE_LAND_WITHIN = 150;           // camera distance below which the detailed coastline shows
 const NEAR_LABELS_WITHIN = 120;         // ...and below which country and sea names replace continents
 const CLOSE_UPS = {
@@ -44,17 +45,23 @@ const CLOSE_UP_POLAR = 0.9;
 
 // Ships are illustrative: PortWatch counts transits, it does not track vessels.
 export const SHIPS_PER_ICON = 80;       // vessels at sea that one drawn ship stands for
-const KM_PER_DAY = 620;                 // about 14 knots
+export const KM_PER_DAY = 620;          // about 14 knots
 const SLOTS_PER_ROUTE = 48;
-/** Which chokepoint's vessel mix colours the ships on each route. */
-const ROUTE_MIX = {
-  gulf_asia: 'hormuz', gulf_europe_suez: 'hormuz', gulf_atlantic_cape: 'hormuz',
-  asia_europe_suez: 'suez', asia_europe_cape: 'cape', brazil_asia_cape: 'cape',
-  asia_india: 'malacca',
-  asia_useast_panama: 'panama', usgulf_asia_panama: 'panama', andes_useast_panama: 'panama',
-};
+
+// Zoom response, as the log of the change in camera distance per pixel of wheel movement.
+// For scale: 0.0069 doubles or halves the distance every 100 pixels.
+const PINCH_RATE = 0.012;       // a trackpad pinch reports small movements
+const WHEEL_RATE = 0.0026;      // a wheel or a two-finger scroll reports large ones
+const WHEEL_NOTCH = 0.13;       // the least one deliberate click of a mouse wheel does (about 14%)
+const PAGE_SCROLL_GRACE = 400;  // ms after the page last scrolled before a plain wheel may zoom
+const NAME_NUDGES = [0, 18, -18, 36, -36];
+
+/** Width on screen, in pixels at the world view, of a lane carrying this many ships a day. */
+export function laneWidth(shipsPerDay) {
+  return 1.5 + shipsPerDay * 0.04;
+}
 /** Where each pin's label sits, so the Suez / Bab el-Mandeb / Hormuz cluster does not overlap. */
-const LABEL_SIDE = { suez: 'left', hormuz: 'right', bab: 'right', panama: 'top', malacca: 'top', cape: 'top' };
+const LABEL_SIDE = { suez: 'left', hormuz: 'right', bab: 'right', panama: 'top', malacca: 'right', cape: 'top' };
 
 const clamp = THREE.MathUtils.clamp;
 const frac = (v) => v - Math.floor(v);
@@ -64,16 +71,28 @@ export class MapScene {
   /**
    * @param {object} o
    * @param {HTMLCanvasElement} o.canvas
-   * @param {HTMLElement} o.labels   layer the pin labels are placed in
+   * @param {HTMLElement} o.labels   layer the pin labels and place names are placed in
+   * @param {HTMLElement} o.overlay  layer for the picked ship's card, which may sit over other cards
    * @param {object} o.model         from data.js
    * @param {(key: string|null) => void} o.onSelect
+   * @param {(ship: {route: string, kind: string, forward: boolean}|null) => void} o.onShip
+   *   called when a ship is picked, changes type, or is let go; fill `shipCard` in response
    */
-  constructor({ canvas, labels, model, onSelect }) {
+  constructor({ canvas, labels, overlay, model, onSelect, onShip }) {
     this.canvas = canvas;
     this.labelLayer = labels;
+    this.overlay = overlay;
     this.model = model;
     this.onSelect = onSelect;
+    this.onShip = onShip;
     this.selected = null;
+    this.ship = null;          // the ship the user picked: { route, slot, kind, dir, anchor }
+    this.drawn = [];           // every ship drawn this frame, for picking
+    this.drawnCount = 0;
+    this.zoomPending = 0;      // zoom still to apply, as a log of the distance change; eased in frame()
+    this.zoomPoint = { x: 0, y: 0 };
+    this.lastWheel = 0;
+    this.lastPageWheel = 0;
     this.insets = { top: 0, right: 0, bottom: 0, left: 0 };
     this.size = { w: 1, h: 1 };
     this.travel = 0;
@@ -87,6 +106,22 @@ export class MapScene {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(PALETTE.sky);
     this.scene.fog = new THREE.Fog(PALETTE.sky, 200, 800);
+
+    // Zoom is handled here (see onWheel), ahead of the controls: their own wheel zoom
+    // is far too weak on a high-density screen and all but ignores a trackpad pinch.
+    canvas.addEventListener('wheel', (e) => this.onWheel(e), { capture: true, passive: false });
+    canvas.addEventListener('dblclick', (e) => this.zoomBy(Math.log(0.5), e));
+    // A pinch arrives as wheel events with Ctrl set; knowing whether the key is really down tells the two apart.
+    window.addEventListener('keydown', (e) => { if (e.key === 'Control') this.ctrlHeld = true; });
+    window.addEventListener('keyup', (e) => { if (e.key === 'Control') this.ctrlHeld = false; });
+    window.addEventListener('blur', () => { this.ctrlHeld = false; });
+    // Safari reports a trackpad pinch as gesture events instead.
+    canvas.addEventListener('gesturestart', (e) => { e.preventDefault(); this.gestureScale = 1; });
+    canvas.addEventListener('gesturechange', (e) => {
+      e.preventDefault();
+      this.zoomBy(Math.log(this.gestureScale / e.scale) * 1.4, e);
+      this.gestureScale = e.scale;
+    });
 
     this.camera = new THREE.PerspectiveCamera(FOV, 1, 1, 4000);
     this.controls = new OrbitControls(this.camera, canvas);
@@ -113,13 +148,20 @@ export class MapScene {
     this.buildMapLabels();
     this.buildPins();
     this.buildBrackets();
+    this.buildShipFocus();
     // Clean, coarse outlines first; the detailed coastline follows for close-ups.
     this.land = {};
-    this.ready = loadLand('coarse').then((polys) => { this.land.coarse = this.buildLand(polys); });
-    this.ready.then(() => loadLand('fine')).then((polys) => { this.land.fine = this.buildLand(polys); }).catch(console.warn);
+    this.ready = loadLand('coarse').then(({ land }) => { this.land.coarse = this.buildLand(land); });
+    this.ready.then(() => loadLand('fine')).then(({ land, borders, countries }) => {
+      this.land.fine = this.buildLand(land);
+      this.buildBorders(borders);
+      this.buildCountryLabels(countries);
+    }).catch(console.warn);
 
+    this.obstacles = [];
     this.resize();
-    this.placeCamera(this.homeView());
+    this.goHome(false);
+    this.controls.addEventListener('start', () => { this.atHome = false; });   // the user took over
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.bindPointer();
 
@@ -186,6 +228,28 @@ export class MapScene {
     });
   }
 
+  /** Country borders, drawn over the land once the camera is close enough to want them. */
+  buildBorders(lines) {
+    const pts = [];
+    for (const line of lines) {
+      for (let i = 1; i < line.length; i++) {
+        const a = project(...line[i - 1]), b = project(...line[i]);
+        if (Math.abs(a.x - b.x) > WORLD_WIDTH / 2) continue;   // a line cut at the date line
+        pts.push(a.x, 0, a.z, b.x, 0, b.z);
+      }
+    }
+    const geometry = new LineSegmentsGeometry().setPositions(pts);
+    this.borderMaterial = this.lineMaterial({ color: PALETTE.border, linewidth: 1.1, transparent: true, opacity: 0 });
+    this.borders = COPIES.map((copy) => {
+      const lines = new LineSegments2(geometry, this.borderMaterial);
+      lines.position.x = copy * WORLD_WIDTH;
+      lines.renderOrder = 2;
+      lines.visible = false;
+      this.scene.add(lines);
+      return lines;
+    });
+  }
+
   buildLanes() {
     // The whole PortWatch lane network, faint, for context.
     const pts = [];
@@ -205,7 +269,7 @@ export class MapScene {
       const geometry = new LineGeometry().setPositions(flat);
       const base = this.lineMaterial({ color: PALETTE.lane, linewidth: 3 });
       const dash = this.lineMaterial({ color: PALETTE.laneDash, linewidth: 1.4, dashed: true, dashSize: 1.1, gapSize: 2.6 });
-      return { routes: trunk.routes, geometry, base, dash };
+      return { routes: trunk.routes, geometry, base, dash, flow: 0, width: laneWidth(0) };
     });
 
     for (const copy of COPIES) {
@@ -229,6 +293,7 @@ export class MapScene {
   /** A screen-width line that draws over land, so canals stay visible. */
   lineMaterial(options) {
     const material = new LineMaterial({ depthTest: false, depthWrite: false, alphaToCoverage: true, ...options });
+    material.resolution.set(this.size.w, this.size.h);
     this.lineMaterials.push(material);
     return material;
   }
@@ -242,6 +307,7 @@ export class MapScene {
       for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
       return {
         key: route.key,
+        mix: route.mix,
         days: route.km / KM_PER_DAY,
         pts, cum,
         length: cum[cum.length - 1],
@@ -317,8 +383,21 @@ export class MapScene {
       node.className = `map-label map-label--${kind}`;
       node.textContent = text;
       this.labelLayer.append(node);
-      return { node, near: kind === 'country' || kind === 'sea', onLand: kind === 'country' || kind === 'continent', ...project(lon, lat) };
+      return { node, near: kind === 'sea', onLand: kind === 'continent', shown: false, ...project(lon, lat) };
     });
+  }
+
+  /** A name for every country, largest first so the big ones claim their space before the small. */
+  buildCountryLabels(countries) {
+    const before = this.pins[0].label;   // names go under the pin labels
+    this.countryLabels = [...countries].sort((a, b) => b.size - a.size).map((country) => {
+      const node = document.createElement('span');
+      node.className = 'map-label map-label--country';
+      node.textContent = COUNTRY_NAMES[country.name] ?? country.name;
+      this.labelLayer.insertBefore(node, before);
+      return { node, size: country.size, shown: false, ...project(country.lon, country.lat) };
+    });
+    for (const label of this.countryLabels) label.width = label.node.offsetWidth;   // one layout pass, after all are in
   }
 
   /** A focus frame on the water around the selected chokepoint: four corner marks. */
@@ -338,6 +417,29 @@ export class MapScene {
     this.scene.add(this.brackets);
   }
 
+  /** Corner marks boxing in the ship the user picked, and the card that follows it. */
+  buildShipFocus() {
+    const a = 0.7, h = 0.34, b = 0.3, arm = 0.3;   // half-length, height and half-beam, in ship lengths
+    const pts = [];
+    for (const sx of [-1, 1]) for (const top of [0, 1]) for (const sz of [-1, 1]) {
+      const x = sx * a, y = top * h, z = sz * b;
+      pts.push(x, y, z, x - sx * 2 * a * arm, y, z);
+      pts.push(x, y, z, x, y + (top ? -1 : 1) * h * arm, z);
+      pts.push(x, y, z, x, y, z - sz * 2 * b * arm);
+    }
+    this.shipFrame = new LineSegments2(
+      new LineSegmentsGeometry().setPositions(pts),
+      this.lineMaterial({ color: PALETTE.accent, linewidth: 2 }));
+    this.shipFrame.renderOrder = 8;
+    this.shipFrame.visible = false;
+    this.scene.add(this.shipFrame);
+
+    this.shipCard = document.createElement('div');
+    this.shipCard.className = 'ship-card';
+    this.shipCard.hidden = true;
+    this.overlay.append(this.shipCard);
+  }
+
   // ----------------------------------------------------------------- data --
 
   /**
@@ -348,13 +450,20 @@ export class MapScene {
     const flows = this.model.routeFlows(index);
     for (const route of this.routes) {
       route.want = Math.round(flows[route.key] * route.days / SHIPS_PER_ICON);
-      const mix = this.model.byKey[ROUTE_MIX[route.key]].mix(index);
+      const mix = this.model.byKey[route.mix].mix(index);
       const total = mix.reduce((s, m) => s + m.count, 0) || 1;
       let running = 0;
       route.shares = SHIP_KINDS.map((kind) => {
         running += mix.filter((m) => kind.types.includes(m.key)).reduce((s, m) => s + m.count, 0) / total;
         return running;
       });
+    }
+    for (const trunk of this.trunks) trunk.flow = trunk.routes.reduce((sum, key) => sum + flows[key], 0);
+    if (!this.started) {
+      // First day shown: start with the ships and lane widths already in place, not growing in from nothing.
+      this.started = true;
+      for (const route of this.routes) route.slots.forEach((slot, k) => { slot.scale = k < route.want ? 1 : 0; });
+      for (const trunk of this.trunks) trunk.width = laneWidth(trunk.flow);
     }
     for (const state of pinStates) {
       const pin = this.pinByKey[state.key];
@@ -372,16 +481,25 @@ export class MapScene {
 
   // --------------------------------------------------------------- camera --
 
-  /** Space the cards cover, in CSS pixels, so the map centres in what is left. */
-  setInsets(insets) {
+  /**
+   * Tell the map where the cards are.
+   * @param {{top: number, right: number, bottom: number, left: number}} insets  margins the cards
+   *   cover, in CSS pixels, so the map centres in what is left
+   * @param {DOMRect[]} obstacles  the cards themselves; place names are not drawn behind them
+   */
+  setLayout(insets, obstacles) {
     this.insets = insets;
+    this.obstacles = obstacles;
     this.applyViewOffset();
   }
 
   applyViewOffset() {
     const { w, h } = this.size, i = this.insets;
     this.camera.setViewOffset(w, h, (i.right - i.left) / 2, (i.bottom - i.top) / 2, w, h);
-    this.reference = this.homeView().distance;   // sizes on screen are tuned relative to the world view
+    const home = this.homeView();
+    this.reference = home.distance;   // sizes on screen are tuned relative to the world view
+    this.controls.maxDistance = Math.max(DISTANCE.max, this.reference * 1.1);
+    if (this.atHome && !this.tween) aim(this.camera, home, this.controls.target);   // keep the world view framed as the window changes
   }
 
   /** Scene units per CSS pixel for something `distance` from the camera. */
@@ -416,7 +534,7 @@ export class MapScene {
       view.x += ((left + right) / 2 - (free.left + free.right) / 2) * perPixel;
       view.z += ((top + bottom) / 2 - (free.top + free.bottom) / 2) * perPixel / Math.cos(polar);
       const overflow = Math.max((right - left) / (free.right - free.left), (bottom - top) / (free.bottom - free.top));
-      view.distance = clamp(view.distance * overflow, DISTANCE.min, DISTANCE.max);
+      view.distance = clamp(view.distance * overflow, DISTANCE.min, DISTANCE.fit);
     }
     return view;
   }
@@ -435,8 +553,10 @@ export class MapScene {
     return x + Math.round((this.controls.target.x - x) / WORLD_WIDTH) * WORLD_WIDTH;
   }
 
+  /** Put the camera somewhere specific. (goHome is the way back to the auto-fitted world view.) */
   placeCamera(view) {
     aim(this.camera, view, this.controls.target);
+    this.atHome = false;
   }
 
   currentView() {
@@ -453,33 +573,147 @@ export class MapScene {
     this.tween = { from: this.currentView(), to: view, start: performance.now(), ms };
   }
 
+  /** Return to the world view. */
+  goHome(fly = true) {
+    const view = this.homeView();
+    if (fly) this.flyTo(view); else aim(this.camera, view, this.controls.target);
+    this.atHome = true;
+  }
+
+  /**
+   * A wheel turn over the map. Pinching, or scrolling with Ctrl or Cmd held, zooms.
+   * A plain turn scrolls the page while the page has somewhere to go, and zooms once it has not.
+   */
+  onWheel(e) {
+    e.stopImmediatePropagation();
+    const now = performance.now();
+    if (!e.ctrlKey && !e.metaKey) {
+      const end = document.documentElement.scrollHeight - window.innerHeight;
+      const pageMoves = e.deltaY < 0 ? window.scrollY > 0 : window.scrollY < end - 1;
+      // The tail of a flick that scrolled the page is ignored, so reaching the top does not run on into a zoom.
+      if (pageMoves || now - this.lastPageWheel < PAGE_SCROLL_GRACE) { this.lastPageWheel = now; return; }
+    }
+    e.preventDefault();
+    const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1);   // lines or pages to pixels
+    let step;
+    if (e.ctrlKey && !this.ctrlHeld && !e.metaKey) {
+      step = clamp(delta, -40, 40) * PINCH_RATE;
+    } else {
+      step = clamp(delta, -120, 120) * WHEEL_RATE;
+      // The first click of a mouse wheel can report a very small movement; make it count.
+      if (now - this.lastWheel > 150 && Math.abs(step) < WHEEL_NOTCH) step = Math.sign(delta) * WHEEL_NOTCH;
+    }
+    this.lastWheel = now;
+    this.zoomBy(step, e);
+  }
+
+  /** Queue a zoom about the pointer. `step` is the log of the change in distance: negative is closer. */
+  zoomBy(step, event) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.zoomPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    this.zoomPending += step;
+    this.tween = null;
+    this.atHome = false;
+  }
+
+  /** Change the camera's distance by `factor`, keeping the spot under a point on screen where it is. */
+  zoomAt(x, y, factor) {
+    const camera = this.camera, target = this.controls.target;
+    const offset = TMP.copy(camera.position).sub(target), distance = offset.length();
+    const next = clamp(distance * factor, DISTANCE.min, this.controls.maxDistance);
+    if (next === distance) { this.zoomPending = 0; return; }   // at a limit; drop the rest
+    const before = this.seaAt(x, y, SPOT_A);
+    camera.position.copy(target).addScaledVector(offset, next / distance);
+    camera.updateMatrixWorld();
+    const after = this.seaAt(x, y, SPOT_B);
+    if (before && after) {
+      const dx = before.x - after.x, dz = before.z - after.z;
+      target.x += dx; target.z += dz;
+      camera.position.x += dx; camera.position.z += dz;
+    }
+  }
+
+  /** Where a point on screen meets the sea surface, or null if it looks above the horizon. */
+  seaAt(x, y, out) {
+    POINTER.set(x / this.size.w * 2 - 1, 1 - y / this.size.h * 2);
+    RAY.setFromCamera(POINTER, this.camera);
+    const reach = -RAY.ray.origin.y / RAY.ray.direction.y;
+    return reach > 0 && Number.isFinite(reach) ? out.copy(RAY.ray.origin).addScaledVector(RAY.ray.direction, reach) : null;
+  }
+
   /** Move the camera closer (factor below 1) or further away, keeping its aim. */
   zoom(factor) {
     const view = this.currentView();
-    view.distance = clamp(view.distance * factor, DISTANCE.min, DISTANCE.max);
+    view.distance = clamp(view.distance * factor, DISTANCE.min, this.controls.maxDistance);
     this.flyTo(view, 350);
+    this.atHome = false;
   }
 
-  /** Select a chokepoint (or null for the world view) and move the camera there. */
+  /**
+   * Select a chokepoint and move the camera to it, or pass null to select none.
+   * Deselecting leaves the camera where it is: the user may still be looking there.
+   */
   select(key, { fly = true } = {}) {
     this.selected = key;
     for (const pin of this.pins) pin.label.classList.toggle('is-selected', pin.key === key);
     this.brackets.visible = Boolean(key);
-    if (fly) this.flyTo(key ? this.closeUpView(key) : this.homeView());
+    if (fly && key) {
+      this.flyTo(this.closeUpView(key));
+      this.atHome = false;
+    }
   }
 
   bindPointer() {
     let down = null;
     const cancelTween = () => { this.tween = null; };
     this.canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; cancelTween(); });
-    this.canvas.addEventListener('wheel', cancelTween, { passive: true });
-    this.canvas.addEventListener('pointerup', (e) => {
-      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
+    const local = (e) => {
       const rect = this.canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left, y = e.clientY - rect.top;
-      const hit = this.pins.find((p) => p.screen.visible && Math.hypot(p.screen.x - x, p.screen.y - 18 - y) < 26);
-      if (hit) this.onSelect(hit.key);
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+    const pinAt = ({ x, y }) => this.pins.find((p) => p.screen.visible && Math.hypot(p.screen.x - x, p.screen.y - 18 - y) < 26);
+    this.canvas.addEventListener('pointerup', (e) => {
+      const click = down && Math.hypot(e.clientX - down.x, e.clientY - down.y) <= 5;
+      down = null;
+      if (!click) return;   // that was a drag
+      const at = local(e), pin = pinAt(at);
+      if (pin) { this.onSelect(pin.key); return; }
+      const ship = this.shipAt(at.x, at.y);
+      if (ship || this.ship) this.selectShip(ship);
+      // A click on nothing clears whatever was picked: the ship above, and the chokepoint here.
+      if (!ship && this.selected) this.onSelect(null);
     });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (e.buttons) return;
+      const at = local(e);
+      this.canvas.style.cursor = pinAt(at) || this.shipAt(at.x, at.y) ? 'pointer' : '';
+    });
+  }
+
+  /** The drawn ship nearest a point on screen, if one is close enough to count as clicked. */
+  shipAt(x, y) {
+    const { w, h } = this.size;
+    let best = null, reach = Math.max(20, (this.shipPixels ?? 0) * 0.45);
+    for (let i = 0; i < this.drawnCount; i++) {
+      const ship = this.drawn[i];
+      TMP.set(ship.x, ship.size * 0.1, ship.z).project(this.camera);
+      if (TMP.z > 1) continue;
+      const d = Math.hypot((TMP.x * 0.5 + 0.5) * w - x, (-TMP.y * 0.5 + 0.5) * h - y);
+      if (d < reach) { best = ship; reach = d; }
+    }
+    return best;
+  }
+
+  /** Pick a ship (one of the records from shipAt) or pass null to let go. */
+  selectShip(pick) {
+    this.ship = pick ? { route: pick.route, slot: pick.slot, kind: pick.kind, dir: pick.route.slots[pick.slot].dir, anchor: null } : null;
+    this.shipFrame.visible = false;   // shown once the next frame has placed it
+    this.shipCard.hidden = !pick;
+    this.onShip(this.shipInfo());
+  }
+
+  shipInfo() {
+    return this.ship && { route: this.ship.route.key, kind: SHIP_KINDS[this.ship.kind].key, forward: this.ship.dir > 0 };
   }
 
   resize() {
@@ -496,15 +730,21 @@ export class MapScene {
   // ---------------------------------------------------------------- frame --
 
   frame(now) {
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const dt = clamp((now - this.last) / 1000, 0, 0.05);
     this.last = now;
 
     if (this.tween) {
       const { from, to, start, ms } = this.tween;
       const t = clamp((now - start) / ms, 0, 1), k = ease(t);
       const mix = (key) => from[key] + (to[key] - from[key]) * k;
-      this.placeCamera({ x: mix('x'), z: mix('z'), distance: mix('distance'), polar: mix('polar'), azimuth: mix('azimuth') });
+      aim(this.camera, { x: mix('x'), z: mix('z'), distance: mix('distance'), polar: mix('polar'), azimuth: mix('azimuth') }, this.controls.target);
       if (t === 1) this.tween = null;
+    }
+    if (Math.abs(this.zoomPending) > 1e-4) {
+      // Ease the queued zoom in over a few frames: quick enough to feel direct, smooth for a mouse wheel's jumps.
+      const step = this.zoomPending * Math.min(1, dt * 18);
+      this.zoomPending -= step;
+      this.zoomAt(this.zoomPoint.x, this.zoomPoint.y, Math.exp(step));
     }
     this.controls.update();
     this.keepInWorld();
@@ -517,10 +757,20 @@ export class MapScene {
     // Land keeps a readable thickness and swaps to the detailed coastline close in;
     // haze and shadows follow the camera.
     const fine = Boolean(this.land.fine) && distance < FINE_LAND_WITHIN;
+    const landHeight = px * 7 * Math.pow(zoom, 0.35);
     for (const [detail, meshes] of Object.entries(this.land)) {
       for (const mesh of meshes) {
         mesh.visible = (detail === 'fine') === fine;
-        mesh.scale.y = px * 7 * Math.pow(zoom, 0.35);
+        mesh.scale.y = landHeight;
+      }
+    }
+    if (this.borders) {
+      // Borders arrive with the detailed coastline and fade up over the next stretch of zoom.
+      const opacity = clamp((FINE_LAND_WITHIN - distance) / 30, 0, 1);
+      this.borderMaterial.opacity = opacity;
+      for (const lines of this.borders) {
+        lines.visible = opacity > 0;
+        lines.position.y = landHeight;
       }
     }
     this.scene.fog.near = distance * 1.15;
@@ -532,11 +782,13 @@ export class MapScene {
     cam.near = distance * 0.2; cam.far = distance * 4;
     cam.updateProjectionMatrix();
 
-    // Lanes thicken a little close in; dashes keep their size on screen and drift along.
-    const laneWidth = 3 * Math.pow(zoom, 0.3);
+    // A lane is as wide as the traffic on it, easing as the date changes, and a
+    // little wider close in. Dashes keep their size on screen and drift along.
+    const closeIn = Math.pow(zoom, 0.3);
     for (const trunk of this.trunks) {
-      trunk.base.linewidth = laneWidth;
-      trunk.dash.linewidth = laneWidth * 0.45;
+      trunk.width += (laneWidth(trunk.flow) - trunk.width) * Math.min(1, dt * 4);
+      trunk.base.linewidth = trunk.width * closeIn;
+      trunk.dash.linewidth = Math.max(0.9, trunk.width * closeIn * 0.4);
       trunk.dash.dashScale = 1 / (px * 5.5);
       trunk.dash.dashOffset -= dt * 1.6;
     }
@@ -544,7 +796,7 @@ export class MapScene {
     this.updateShips(dt, px, zoom, distance);
     this.updatePins(now / 1000, px);
     this.renderer.render(this.scene, this.camera);
-    this.placeLabels(distance, px * 7 * Math.pow(zoom, 0.35));
+    this.placeLabels(distance, landHeight, px);
   }
 
   /** The world repeats, so slide back to the middle copy instead of running off the edge. */
@@ -557,11 +809,16 @@ export class MapScene {
   }
 
   updateShips(dt, px, zoom, distance) {
-    const length = px * Math.min(72, 25 * Math.pow(zoom, 0.42));   // ship length in scene units
+    // Ship length in scene units: about 25 pixels in the world view on a desktop, fewer on a phone.
+    const length = px * Math.min(72, clamp(this.size.w / 58, 13, 25) * Math.pow(zoom, 0.42));
     this.travel += dt * length * 0.34;
+    this.shipPixels = length / px;
+    this.drawnCount = 0;
     const counts = SHIP_KINDS.map(() => 0);
     const centre = this.controls.target.x, reach = distance * 2.4 + 30;
     const edge = length * 2.5;
+    const picked = this.ship;
+    let anchor = null;
 
     for (const route of this.routes) {
       for (let k = 0; k < SLOTS_PER_ROUTE; k++) {
@@ -583,8 +840,10 @@ export class MapScene {
         let kind = route.shares.findIndex((share) => slot.pick < share);
         if (kind < 0) kind = SHIP_KINDS.length - 1;
         const x = HERE.x - hz * length * 0.2, z = HERE.z + hx * length * 0.2;
-        QUAT.setFromAxisAngle(UP, Math.atan2(-hz, hx));
+        const yaw = Math.atan2(-hz, hx);
+        QUAT.setFromAxisAngle(UP, yaw);
         SCALE.set(size, size * 1.5, size * 1.55);   // toy proportions: taller and beamier than life
+        if (picked && picked.route === route && picked.slot === k) anchor = { x: this.nearestCopy(x), z, size, yaw, kind };
 
         for (const copy of COPIES) {
           const cx = x + copy * WORLD_WIDTH;
@@ -592,6 +851,10 @@ export class MapScene {
           POSITION.set(cx, Math.sin(this.travel / length * 0.9 + slot.phase * 40) * size * 0.006, z);
           MATRIX.compose(POSITION, QUAT, SCALE);
           this.shipMeshes[kind].setMatrixAt(counts[kind]++, MATRIX);
+          const record = this.drawn[this.drawnCount] ?? (this.drawn[this.drawnCount] = {});
+          this.drawnCount++;
+          record.route = route; record.slot = k; record.kind = kind;
+          record.x = cx; record.z = z; record.size = size;
         }
       }
     }
@@ -599,6 +862,25 @@ export class MapScene {
       mesh.count = counts[i];
       mesh.instanceMatrix.needsUpdate = true;
     });
+    if (picked) this.followShip(anchor, length);
+  }
+
+  /** Keep the corner marks on the picked ship; let go of it once it has left the map. */
+  followShip(anchor, length) {
+    if (!anchor || anchor.size < length * 0.35) {   // traffic fell, or it reached the end of its route
+      this.selectShip(null);
+      return;
+    }
+    const ship = this.ship;
+    ship.anchor = anchor;
+    this.shipFrame.visible = true;
+    this.shipFrame.position.set(anchor.x, 0, anchor.z);
+    this.shipFrame.rotation.y = anchor.yaw;
+    this.shipFrame.scale.set(anchor.size, anchor.size * 1.5, anchor.size * 1.55);
+    if (anchor.kind !== ship.kind) {   // the mix of ship types changed with the date
+      ship.kind = anchor.kind;
+      this.onShip(this.shipInfo());
+    }
   }
 
   updatePins(seconds, px) {
@@ -625,15 +907,11 @@ export class MapScene {
     }
   }
 
-  placeLabels(distance, landHeight) {
+  placeLabels(distance, landHeight, px) {
     const { w, h } = this.size;
-    const near = distance < NEAR_LABELS_WITHIN;
-    for (const label of this.mapLabels) {
-      TMP.set(this.nearestCopy(label.x), label.onLand ? landHeight : 0, label.z).project(this.camera);
-      const shown = label.near === near && TMP.z < 1 && Math.abs(TMP.x) < 1.05 && Math.abs(TMP.y) < 1.05;
-      label.node.classList.toggle('is-shown', shown);
-      if (shown) label.node.style.transform = `translate3d(${((TMP.x * 0.5 + 0.5) * w).toFixed(1)}px, ${((-TMP.y * 0.5 + 0.5) * h).toFixed(1)}px, 0)`;
-    }
+
+    // Pin labels first; the place names then keep out of their way.
+    const taken = [];
     for (const pin of this.pins) {
       const scale = pin.group.scale.x;
       TMP.set(pin.group.position.x, (pin.marker.position.y + 1.55) * scale, pin.group.position.z).project(this.camera);
@@ -641,7 +919,75 @@ export class MapScene {
       const x = (TMP.x * 0.5 + 0.5) * w, y = (-TMP.y * 0.5 + 0.5) * h;
       pin.screen = { x, y, visible };
       pin.label.style.display = visible ? '' : 'none';
-      if (visible) pin.label.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+      if (!visible) continue;
+      pin.label.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+      // Roughly where the label and the pin itself sit, by which side the label is on.
+      const side = pin.label.dataset.side, wide = pin.key === this.selected ? 250 : 150;
+      taken.push({ left: x - 14, right: x + 14, top: y - 14, bottom: y + 26 });
+      taken.push(side === 'left' ? { left: x - 14 - wide, right: x - 14, top: y - 14, bottom: y + 14 }
+        : side === 'right' ? { left: x + 14, right: x + 14 + wide, top: y - 14, bottom: y + 14 }
+          : { left: x - wide / 2, right: x + wide / 2, top: y - 40, bottom: y - 12 });
+    }
+
+    // A name shows if it is on the map, clear of the cards, and nothing else is already written there.
+    const free = (box) => box.left > 4 && box.right < w - 4 && box.top > this.insets.top + 4 && box.bottom < h - this.insets.bottom
+      && !this.obstacles.some((r) => box.left < r.right + 6 && box.right > r.left - 6 && box.top < r.bottom + 6 && box.bottom > r.top - 6)
+      && !taken.some((r) => box.left < r.right && box.right > r.left && box.top < r.bottom && box.bottom > r.top);
+    // `nudges` are the vertical shifts, in pixels, a name may try when its own spot is taken.
+    const place = (label, wanted, height, halfWidth, nudges = [0]) => {
+      let shown = false;
+      if (wanted) {
+        TMP.set(this.nearestCopy(label.x), height, label.z).project(this.camera);
+        if (TMP.z < 1) {
+          const x = (TMP.x * 0.5 + 0.5) * w, at = (-TMP.y * 0.5 + 0.5) * h;
+          for (const nudge of nudges) {
+            const y = at + nudge;
+            const box = { left: x - halfWidth, right: x + halfWidth, top: y - 9, bottom: y + 9 };
+            if (!free(box)) continue;
+            shown = true;
+            taken.push(box);
+            label.node.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+            break;
+          }
+        }
+      }
+      if (shown !== label.shown) {
+        label.shown = shown;
+        label.node.classList.toggle('is-shown', shown);
+      }
+    };
+    const near = distance < NEAR_LABELS_WITHIN;
+    for (const label of this.mapLabels) place(label, label.near === near, label.onLand ? landHeight : 0, 50);
+    if (this.countryLabels) {
+      // Biggest first. A country gets its name once it is about ten pixels across on screen.
+      const smallest = px * 10;
+      for (const label of this.countryLabels) {
+        // A name may slide a little way up or down its country to get clear, less far in a small one.
+        const room = label.size / px * 0.35;
+        place(label, near && label.size >= smallest, landHeight, label.width / 2 + 5, NAME_NUDGES.filter((n) => Math.abs(n) <= room));
+      }
+    }
+
+    const anchor = this.ship?.anchor;
+    if (anchor) {
+      // The card sits beside the ship: above it, below it, or to one side. It takes the first
+      // spot that is clear of the other cards; failing that, the first that is on screen at all.
+      TMP.set(anchor.x, anchor.size * 0.3, anchor.z).project(this.camera);
+      const x = (TMP.x * 0.5 + 0.5) * w, y = (-TMP.y * 0.5 + 0.5) * h;
+      const card = this.shipCard, cw = card.offsetWidth, ch = card.offsetHeight, gap = this.shipPixels * 0.5 + 14;
+      const edge = 8, centred = clamp(x - cw / 2, edge, Math.max(edge, w - cw - edge));
+      const beside = [y - ch / 2, y - ch * 0.8, y - ch * 0.2].map((top) => clamp(top, edge, Math.max(edge, h - ch - edge)));
+      const spots = [
+        [centred, y - gap - ch], [centred, y + gap],
+        ...beside.flatMap((top) => [[x + gap, top], [x - gap - cw, top]]),
+      ];
+      const floor = h - this.insets.bottom - edge;   // the section below the map
+      const onScreen = ([left, top]) => left >= edge && left + cw <= w - edge && top >= this.insets.top + edge && top + ch <= floor;
+      const clear = ([left, top]) => !this.obstacles.some((r) => left < r.right + 6 && left + cw > r.left - 6 && top < r.bottom + 6 && top + ch > r.top - 6);
+      // Last resort, on a small screen: keep the whole card readable even if it covers the ship.
+      const squeezed = [centred, clamp(y + gap, this.insets.top + edge, Math.max(this.insets.top + edge, floor - ch))];
+      const [left, top] = spots.find((s) => onScreen(s) && clear(s)) ?? spots.find(onScreen) ?? squeezed;
+      card.style.transform = `translate3d(${left.toFixed(1)}px, ${top.toFixed(1)}px, 0)`;
     }
   }
 }
@@ -650,6 +996,7 @@ export class MapScene {
 const HERE = { x: 0, z: 0 }, AHEAD = { x: 0, z: 0 }, BEHIND = { x: 0, z: 0 };
 const POSITION = new THREE.Vector3(), SCALE = new THREE.Vector3(), TMP = new THREE.Vector3(), TARGET = new THREE.Vector3();
 const QUAT = new THREE.Quaternion(), MATRIX = new THREE.Matrix4(), UP = new THREE.Vector3(0, 1, 0);
+const RAY = new THREE.Raycaster(), POINTER = new THREE.Vector2(), SPOT_A = new THREE.Vector3(), SPOT_B = new THREE.Vector3();
 
 /**
  * Point `camera` at a spot on the sea. polar is the tilt away from straight

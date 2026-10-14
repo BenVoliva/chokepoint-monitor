@@ -31,7 +31,26 @@ const SHORT_NAMES = {
   bab: 'Bab el-Mandeb', cape: 'Cape of Good Hope',
 };
 
-const STATUS = [
+/**
+ * The ten illustrative routes: where each starts and ends (in the order its
+ * path is drawn), and which chokepoint's ships it is filled from. `mix` decides
+ * the blend of ship types on the route and the cargo quoted for a ship on it.
+ */
+const ROUTE_INFO = {
+  asia_europe_suez: { from: 'East Asia', to: 'Europe', mix: 'suez' },
+  asia_europe_cape: { from: 'East Asia', to: 'Europe', mix: 'cape' },
+  gulf_asia: { from: 'the Gulf', to: 'East Asia', mix: 'hormuz' },
+  gulf_europe_suez: { from: 'the Gulf', to: 'Europe', mix: 'hormuz' },
+  gulf_atlantic_cape: { from: 'the Gulf', to: 'Europe', mix: 'hormuz' },
+  asia_india: { from: 'East Asia', to: 'India', mix: 'malacca' },
+  brazil_asia_cape: { from: 'Brazil', to: 'East Asia', mix: 'cape' },
+  asia_useast_panama: { from: 'East Asia', to: 'the US East Coast', mix: 'panama' },
+  usgulf_asia_panama: { from: 'the US Gulf Coast', to: 'East Asia', mix: 'panama' },
+  andes_useast_panama: { from: 'Chile', to: 'the US East Coast', mix: 'panama' },
+};
+
+/** Status bands, by share of normal traffic. The first whose `min` is met applies. */
+export const STATUS = [
   { min: 1.25, key: 'surge', label: 'Above normal', tone: 'info' },
   { min: 0.85, key: 'normal', label: 'Normal', tone: 'good' },
   { min: 0.65, key: 'reduced', label: 'Reduced', tone: 'warning' },
@@ -125,6 +144,7 @@ function buildModel(transits, prices, events, routes) {
       lon: c.lon,
       topCargo: c.top_cargo,
       byType: c.n,
+      tonsByType: c.kt,
       total, tons, avg7, tons7, baseline, tonsBaseline,
       /** Share of normal traffic on day i (7-day average over the baseline). */
       ratio: (i) => avg7[i] / baseline[i],
@@ -134,6 +154,14 @@ function buildModel(transits, prices, events, routes) {
         for (let j = Math.max(0, i - 6); j <= i; j++) n += c.n[t.key][j] ?? 0;
         return { ...t, count: n };
       }),
+      /** Ships of the given types, and the thousand tonnes they carried, over the `window` days ending on day i. */
+      sum: (types, i, window = 7) => {
+        let ships = 0, kt = 0;
+        for (let j = Math.max(0, i - window + 1); j <= i; j++) {
+          for (const type of types) { ships += c.n[type][j] ?? 0; kt += c.kt[type][j] ?? 0; }
+        }
+        return { ships, kt };
+      },
     };
   });
   const byKey = Object.fromEntries(chokepoints.map((c) => [c.key, c]));
@@ -187,6 +215,31 @@ function buildModel(transits, prices, events, routes) {
     };
   }
 
+  /** Month-by-month averages for one chokepoint, oldest first; the last month may be part-way through. */
+  function monthly(c) {
+    const rows = [];
+    for (let i = 0; i < days; i++) {
+      const { year, month } = calendar[i];
+      let row = rows[rows.length - 1];
+      if (!row || row.year !== year || row.month !== month) {
+        row = { year, month, first: i, last: i, ships: 0, normal: 0, kt: 0, brent: 0, byType: SHIP_TYPES.map(() => 0) };
+        rows.push(row);
+      }
+      row.last = i;
+      row.ships += c.total[i];
+      row.normal += c.baseline[i];
+      row.kt += c.tons[i];
+      row.brent += brentAt(i);
+      SHIP_TYPES.forEach((t, k) => { row.byType[k] += c.byType[t.key][i] ?? 0; });
+    }
+    for (const row of rows) {
+      const n = row.last - row.first + 1;
+      for (const field of ['ships', 'normal', 'kt', 'brent']) row[field] /= n;
+      row.byType = row.byType.map((v) => v / n);
+    }
+    return rows;
+  }
+
   return {
     days, dateAt, indexOf, clampIndex,
     latest: days - 1,
@@ -195,9 +248,10 @@ function buildModel(transits, prices, events, routes) {
     brentAt, brentStart, brentDays: brent.length, brentEnd: prices.brent.end,
     freightAt,
     events: timeline,
-    routes: routes.routes,
+    routes: routes.routes.map((route) => ({ ...route, ...ROUTE_INFO[route.key] })),
     trunks: routes.trunks,
     network: routes.network,
     routeFlows,
+    monthly,
   };
 }
