@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="512" height="512">
+  <title>Chokepoint Monitor</title>
+  <rect width="32" height="32" rx="9" fill="#2f62e6"/>
+  <path d="M7 17.5a9 9 0 0 1 18 0" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".55"/>
+  <path d="M16 17.5l4.6-5.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="16" cy="17.5" r="2" fill="#fff"/>
+  <path d="M6.5 23c2.4 0 2.4-1.5 4.8-1.5s2.4 1.5 4.7 1.5 2.4-1.5 4.7-1.5 2.4 1.5 4.8 1.5" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" opacity=".55"/>
+</svg>
