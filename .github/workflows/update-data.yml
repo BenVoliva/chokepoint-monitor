@@ -29,8 +29,11 @@ jobs:
           python-version: "3.12"
 
       # Each script leaves its files untouched unless it has something complete and new.
+      # If PortWatch is down even after the script's retries, the published data stays
+      # as it was and the run shows a warning; the news is still fetched below.
       - name: Fetch the latest data
         run: python3 scripts/fetch_data.py
+        continue-on-error: true
 
       - name: Fetch the news headlines
         run: python3 scripts/fetch_news.py

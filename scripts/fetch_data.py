@@ -26,6 +26,9 @@ START = date(2019, 1, 1)  # first day PortWatch publishes
 
 PORTWATCH = "https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services"
 PAGE = 1000  # PortWatch's maximum rows per request
+# The whole daily table as one CSV, from PortWatch's catalogue (ArcGIS Hub).
+DAILY_CSV = "https://hub.arcgis.com/api/v3/datasets/3da2b9ca97684916b75c4013f95d18ab_0/downloads/data?format=csv&spatialRefId=4326&where=1%3D1"
+TRIES = 5  # attempts per request before giving up (waits 5, 10, 20 and 40 seconds between them)
 # our key -> PortWatch portid.  The first four are the headline chokepoints;
 # Bab el-Mandeb and the Cape show where Suez traffic went when it left.
 CHOKEPOINTS = {
@@ -43,7 +46,7 @@ USER_AGENT = "chokepoint-monitor (+https://github.com/BenVoliva/chokepoint-monit
 
 
 def get(url, params, tries=4):
-    full = url + "?" + urllib.parse.urlencode(params)
+    full = url + ("?" + urllib.parse.urlencode(params) if params else "")
     for attempt in range(tries):
         try:
             req = urllib.request.Request(full, headers={"User-Agent": USER_AGENT})
@@ -56,26 +59,29 @@ def get(url, params, tries=4):
             time.sleep(3 * (attempt + 1))
 
 
-def arcgis_rows(service, where, fields):
-    """Every row matching `where`, paging past the per-request limit."""
-    rows, offset = [], 0
-    while True:
-        body = json.loads(get(f"{PORTWATCH}/{service}/FeatureServer/0/query", {
-            "where": where,
-            "outFields": ",".join(fields),
-            "orderByFields": "ObjectId",
-            "resultOffset": offset,
-            "resultRecordCount": PAGE,
-            "returnGeometry": "false",
-            "f": "json",
-        }))
-        if "error" in body:
-            raise RuntimeError(f"PortWatch error: {body['error']}")
-        page = [f["attributes"] for f in body.get("features", [])]
-        rows.extend(page)
-        if not page or not (body.get("exceededTransferLimit") or len(page) == PAGE):
-            return rows
-        offset += len(page)
+def arcgis_rows(service, where, fields, statistic=None):
+    """The rows matching `where`, from a single request.
+
+    PortWatch now and then turns down a perfectly good query ("Invalid query
+    parameters") and accepts the same one moments later, and it does so most
+    often for queries that page deep into a table. So callers keep each query
+    under PAGE rows, which needs no paging at all, and a refusal is retried.
+    """
+    for attempt in range(TRIES):
+        params = {"where": where, "outFields": ",".join(fields), "resultRecordCount": PAGE, "f": "json"}
+        if statistic:   # one number back: e.g. the latest date in the table
+            params = {"where": where, "f": "json", "outStatistics": json.dumps(
+                [{"statisticType": statistic, "onStatisticField": fields[0], "outStatisticFieldName": "value"}])}
+        body = json.loads(get(f"{PORTWATCH}/{service}/FeatureServer/0/query", params))
+        if "error" not in body and statistic:
+            return body["features"][0]["attributes"]["value"]
+        if "error" not in body:
+            if body.get("exceededTransferLimit"):
+                raise RuntimeError(f"more than {PAGE} rows for {where!r}; ask for less at a time")
+            return [f["attributes"] for f in body.get("features", [])]
+        if attempt == TRIES - 1:
+            raise RuntimeError(f"PortWatch error after {TRIES} tries for {where!r}: {body['error']}")
+        time.sleep(5 * 2 ** attempt)
 
 
 def as_date(value):
@@ -85,14 +91,66 @@ def as_date(value):
     return date.fromisoformat(str(value)[:10])
 
 
+def daily_rows(fields):
+    """The daily counts for our chokepoints.
+
+    Mainly from the whole table as one CSV file, which PortWatch's catalogue
+    serves in a single request. The query service is the fallback, a chokepoint
+    and a year at a time, both when the file cannot be had and when it lags
+    behind the service.
+    """
+    ours = set(CHOKEPOINTS.values())
+    rows, latest = [], None
+    try:
+        text = get(DAILY_CSV, {}).lstrip("\ufeff")
+        for raw in csv.DictReader(io.StringIO(text)):
+            if raw["portid"] not in ours:
+                continue
+            row = {"date": raw["date"].replace("/", "-"), "portid": raw["portid"]}
+            for field in fields[2:]:
+                value = raw.get(field, "")
+                row[field] = float(value) if value not in ("", None) else None
+            rows.append(row)
+        latest = max(r["date"] for r in rows)
+    except Exception as err:
+        print(f"  the CSV download failed ({type(err).__name__}: {err}); using the query service", file=sys.stderr)
+        rows = []
+    if rows:
+        try:
+            newest = arcgis_rows("Daily_Chokepoints_Data", "1=1", ["date"], statistic="max")
+        except Exception:
+            newest = None   # cannot tell; the file will do
+        if not newest or newest <= latest:
+            print(f"  daily counts: {len(rows):,} rows from the CSV download, up to {latest}", file=sys.stderr)
+            return rows
+        print(f"  the CSV download stops at {latest} but the service has {newest}; using the service", file=sys.stderr)
+    rows = []
+    for pid in CHOKEPOINTS.values():   # one chokepoint and one year per request: at most 366 rows, never a second page
+        for year in range(START.year, datetime.now(timezone.utc).year + 1):
+            rows += arcgis_rows("Daily_Chokepoints_Data", f"portid = '{pid}' AND year = {year}", fields)
+    return rows
+
+
+def chokepoint_places(ids):
+    """Name, position and main cargoes of each chokepoint; kept from the published file if PortWatch will not answer."""
+    try:
+        return {r["portid"]: r for r in arcgis_rows(
+            "PortWatch_chokepoints_database", f"portid IN ({ids})",
+            ["portid", "portname", "lat", "lon", "industry_top1", "industry_top2", "industry_top3"])}
+    except Exception as err:
+        print(f"  chokepoint details not read ({err}); keeping the published ones", file=sys.stderr)
+        old = json.loads((DATA / "transits.json").read_text())
+        return {c["id"]: {"portid": c["id"], "portname": c["name"], "lat": c["lat"], "lon": c["lon"],
+                          **{f"industry_top{i + 1}": cargo for i, cargo in enumerate(c["top_cargo"])}}
+                for c in old["chokepoints"]}
+
+
 def build_transits():
     ids = ",".join(f"'{pid}'" for pid in CHOKEPOINTS.values())
     fields = ["date", "portid"]
     fields += [f"n_{t}" for t in SHIP_TYPES] + [f"capacity_{t}" for t in SHIP_TYPES]
-    rows = arcgis_rows("Daily_Chokepoints_Data", f"portid IN ({ids})", fields)
-    places = {r["portid"]: r for r in arcgis_rows(
-        "PortWatch_chokepoints_database", f"portid IN ({ids})",
-        ["portid", "portname", "lat", "lon", "industry_top1", "industry_top2", "industry_top3"])}
+    rows = daily_rows(fields)
+    places = chokepoint_places(ids)
 
     days = [as_date(r["date"]) for r in rows]
     end = max(days)
